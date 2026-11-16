@@ -1,4 +1,4 @@
-import { CheckCircle2, Loader2, MessageCircle } from 'lucide-react';
+import { CalendarClock, CheckCircle2, Loader2, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
@@ -7,7 +7,10 @@ import {
 } from '../lib/firebase.ts';
 import {
   extractReadableError,
+  submitBookingChangeRequest,
   submitCustomerBooking,
+  triggerWhatsAppNotification,
+  validateBookingChangeRequestPayload,
   validateBookingPayload,
 } from '../lib/firestoreService.ts';
 import {
@@ -17,6 +20,8 @@ import {
   PRODUCT_PREFERENCES,
 } from '../shared/defaults.ts';
 import type {
+  BookingChangeRequestPayload,
+  BookingChangeRequestRecord,
   BookingRecord,
   BookingRequestPayload,
   PricingCategory,
@@ -58,12 +63,28 @@ export function BookingSection({
     cleaningType: selectedCleaningType || CLEANING_TYPES[0],
     productPreference: PRODUCT_PREFERENCES[0],
     instructions: '',
+    whatsappConsent: false,
   });
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [confirmedBooking, setConfirmedBooking] = useState<BookingRecord | null>(null);
+
+  const [changeOpen, setChangeOpen] = useState(false);
+  const [changeForm, setChangeForm] = useState<BookingChangeRequestPayload>({
+    referenceCode: '',
+    phoneNumber: '',
+    requestType: 'reschedule',
+    requestedDate: getTodayDateString(),
+    requestedTime: PREFERRED_TIMES[0],
+    reason: '',
+  });
+  const [changeErrors, setChangeErrors] = useState<Record<string, string>>({});
+  const [changeSubmitError, setChangeSubmitError] = useState<string | null>(null);
+  const [isSubmittingChange, setIsSubmittingChange] = useState(false);
+  const [submittedChangeRequest, setSubmittedChangeRequest] =
+    useState<BookingChangeRequestRecord | null>(null);
 
   useEffect(() => {
     setForm((prev) => ({
@@ -98,6 +119,21 @@ export function BookingSection({
       const savedBooking = await submitCustomerBooking(form);
       setConfirmedBooking(savedBooking);
       setFieldErrors({});
+
+      // Notify the business owner via secure server-side WhatsApp endpoint (fire-and-forget)
+      triggerWhatsAppNotification({
+        event: 'owner_new_booking',
+        idempotencyKey: `owner_new:${savedBooking.id}`,
+        referenceCode: savedBooking.referenceCode,
+        customerName: savedBooking.fullName,
+        customerPhone: savedBooking.phoneNumber,
+        locationEstate: savedBooking.locationEstate,
+        houseType: savedBooking.houseType,
+        cleaningType: savedBooking.cleaningType,
+        preferredDate: savedBooking.preferredDate,
+        preferredTime: savedBooking.preferredTime,
+        productPreference: savedBooking.productPreference,
+      }).catch(() => {});
     } catch (error) {
       setSubmitError(
         extractReadableError(
@@ -124,7 +160,55 @@ export function BookingSection({
       cleaningType: selectedCleaningType || CLEANING_TYPES[0],
       productPreference: PRODUCT_PREFERENCES[0],
       instructions: '',
+      whatsappConsent: false,
     });
+  };
+
+  const handleChangeSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setChangeSubmitError(null);
+
+    const errors = validateBookingChangeRequestPayload(changeForm);
+    setChangeErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
+
+    if (!isFirebaseConfigured) {
+      setChangeSubmitError(
+        activeFirebaseError || 'Online booking database is not configured yet.'
+      );
+      return;
+    }
+
+    setIsSubmittingChange(true);
+    try {
+      const savedRequest = await submitBookingChangeRequest(changeForm);
+      setSubmittedChangeRequest(savedRequest);
+      setChangeErrors({});
+
+      triggerWhatsAppNotification({
+        event:
+          savedRequest.requestType === 'cancel'
+            ? 'owner_cancel_request'
+            : 'owner_reschedule_request',
+        idempotencyKey: `owner_change:${savedRequest.id}`,
+        referenceCode: savedRequest.referenceCode,
+        customerPhone: savedRequest.phoneNumber,
+        requestedDate: savedRequest.requestedDate,
+        requestedTime: savedRequest.requestedTime,
+        reason: savedRequest.reason,
+      }).catch(() => {});
+    } catch (error) {
+      setChangeSubmitError(
+        extractReadableError(
+          error,
+          'Could not submit your booking change request. Please try again or contact us on WhatsApp.'
+        )
+      );
+    } finally {
+      setIsSubmittingChange(false);
+    }
   };
 
   return (
@@ -208,6 +292,20 @@ export function BookingSection({
                   </div>
                 </div>
 
+                <div className="mb-6 rounded-xl border border-[#1B4332]/25 bg-[#DCE6DD]/45 px-4 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="block text-xs font-medium text-[#4F6F58]">
+                      Your Booking Reference
+                    </span>
+                    <span className="font-mono text-lg sm:text-xl font-semibold tracking-wider text-[#1B4332] select-all">
+                      {confirmedBooking.referenceCode}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#4E544F] max-w-xs">
+                    Keep this reference code to confirm, reschedule, or cancel your appointment.
+                  </p>
+                </div>
+
                 <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-5 border-y border-[#DDD4C3] text-sm">
                   <div>
                     <dt className="text-[#525753]">Location / Estate</dt>
@@ -245,6 +343,14 @@ export function BookingSection({
                     <dt className="text-[#525753]">Cleaning Products Option</dt>
                     <dd className="font-medium text-[#222523] mt-0.5">
                       {confirmedBooking.productPreference}
+                    </dd>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <dt className="text-[#525753]">WhatsApp Notification Updates</dt>
+                    <dd className="font-medium text-[#222523] mt-0.5">
+                      {confirmedBooking.whatsappConsent
+                        ? 'Opted in — you will receive updates when your booking is confirmed, changed, or cancelled.'
+                        : 'Not opted in — we will contact you by phone or email if needed.'}
                     </dd>
                   </div>
                 </dl>
@@ -547,6 +653,21 @@ export function BookingSection({
                   />
                 </div>
 
+                <label className="flex items-start gap-3 p-3.5 rounded-xl border border-[#DDD4C3] bg-[#F4EFE6]/60 cursor-pointer">
+                  <input
+                    id="booking-whatsappConsent"
+                    type="checkbox"
+                    checked={form.whatsappConsent}
+                    onChange={(e) => setForm({ ...form, whatsappConsent: e.target.checked })}
+                    className="mt-1 accent-[#1B4332] shrink-0"
+                  />
+                  <span className="text-xs sm:text-sm text-[#3B3F3C] leading-relaxed">
+                    I agree to receive WhatsApp notifications from {config.businessName} on the
+                    phone number above regarding booking confirmation, appointment changes, or
+                    cancellations.
+                  </span>
+                </label>
+
                 <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                   <button
                     type="submit"
@@ -574,6 +695,251 @@ export function BookingSection({
                 </div>
               </form>
             )}
+
+            {/* Existing Booking Reschedule / Cancellation Request Panel */}
+            <div className="mt-6 bg-[#F4EFE6]/70 rounded-2xl border border-[#DDD4C3] p-5 sm:p-6">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <CalendarClock className="w-4 h-4 text-[#1B4332] shrink-0" aria-hidden="true" />
+                  <span className="text-sm font-medium text-[#222523]">
+                    Already booked? Request to reschedule or cancel
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChangeOpen((prev) => !prev);
+                    setSubmittedChangeRequest(null);
+                    setChangeSubmitError(null);
+                  }}
+                  aria-expanded={changeOpen}
+                  className="px-3.5 py-2 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#FAF8F4] hover:bg-[#E9E2D4] border border-[#DDD4C3] rounded-xl transition-colors cursor-pointer"
+                >
+                  {changeOpen ? 'Hide Form' : 'Manage Existing Booking'}
+                </button>
+              </div>
+
+              {changeOpen && (
+                <div className="mt-5 pt-5 border-t border-[#DDD4C3]">
+                  {submittedChangeRequest ? (
+                    <div
+                      role="status"
+                      className="p-4 rounded-xl bg-[#FAF8F4] border border-[#1B4332]/30 space-y-2 text-sm"
+                    >
+                      <p className="font-medium text-[#1B4332]">
+                        {submittedChangeRequest.requestType === 'cancel'
+                          ? 'Cancellation request received'
+                          : 'Rescheduling request received'}{' '}
+                        ·{' '}
+                        <span className="font-mono">{submittedChangeRequest.referenceCode}</span>
+                      </p>
+                      <p className="text-[#525753]">
+                        We have notified {config.businessName} and will follow up with you shortly.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSubmittedChangeRequest(null);
+                          setChangeForm({
+                            referenceCode: '',
+                            phoneNumber: '',
+                            requestType: 'reschedule',
+                            requestedDate: getTodayDateString(),
+                            requestedTime: PREFERRED_TIMES[0],
+                            reason: '',
+                          });
+                        }}
+                        className="text-xs font-medium text-[#1B4332] underline underline-offset-4 cursor-pointer"
+                      >
+                        Submit another request
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleChangeSubmit} noValidate className="space-y-4">
+                      {changeSubmitError && (
+                        <div
+                          role="alert"
+                          className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800"
+                        >
+                          {changeSubmitError}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label
+                            htmlFor="change-ref"
+                            className="block text-xs font-medium text-[#222523] mb-1"
+                          >
+                            Booking Reference
+                          </label>
+                          <input
+                            id="change-ref"
+                            type="text"
+                            value={changeForm.referenceCode}
+                            onChange={(e) =>
+                              setChangeForm({
+                                ...changeForm,
+                                referenceCode: e.target.value.toUpperCase(),
+                              })
+                            }
+                            placeholder="e.g. LCC-A4F9K2"
+                            className="w-full px-3 py-2 min-h-[42px] rounded-xl border border-[#DDD4C3] bg-white text-sm font-mono uppercase"
+                          />
+                          {changeErrors.referenceCode && (
+                            <p className="mt-1 text-xs text-red-700">
+                              {changeErrors.referenceCode}
+                            </p>
+                          )}
+                        </div>
+
+                        <div>
+                          <label
+                            htmlFor="change-phone"
+                            className="block text-xs font-medium text-[#222523] mb-1"
+                          >
+                            Phone Number Used When Booking
+                          </label>
+                          <input
+                            id="change-phone"
+                            type="tel"
+                            value={changeForm.phoneNumber}
+                            onChange={(e) =>
+                              setChangeForm({ ...changeForm, phoneNumber: e.target.value })
+                            }
+                            placeholder="e.g. 07XX XXX XXX"
+                            className="w-full px-3 py-2 min-h-[42px] rounded-xl border border-[#DDD4C3] bg-white text-sm tabular-nums"
+                          />
+                          {changeErrors.phoneNumber && (
+                            <p className="mt-1 text-xs text-red-700">{changeErrors.phoneNumber}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex flex-wrap gap-3">
+                        {(
+                          [
+                            { id: 'reschedule', label: 'Request Rescheduling' },
+                            { id: 'cancel', label: 'Request Cancellation' },
+                          ] as const
+                        ).map((opt) => (
+                          <label
+                            key={opt.id}
+                            className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-medium cursor-pointer ${
+                              changeForm.requestType === opt.id
+                                ? 'border-[#1B4332] bg-[#DCE6DD]/60 text-[#1B4332]'
+                                : 'border-[#DDD4C3] bg-white text-[#525753]'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="changeRequestType"
+                              value={opt.id}
+                              checked={changeForm.requestType === opt.id}
+                              onChange={() =>
+                                setChangeForm({ ...changeForm, requestType: opt.id })
+                              }
+                              className="accent-[#1B4332]"
+                            />
+                            <span>{opt.label}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      {changeForm.requestType === 'reschedule' && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label
+                              htmlFor="change-date"
+                              className="block text-xs font-medium text-[#222523] mb-1"
+                            >
+                              New Preferred Date
+                            </label>
+                            <input
+                              id="change-date"
+                              type="date"
+                              min={getTodayDateString()}
+                              value={changeForm.requestedDate}
+                              onChange={(e) =>
+                                setChangeForm({ ...changeForm, requestedDate: e.target.value })
+                              }
+                              className="w-full px-3 py-2 min-h-[42px] rounded-xl border border-[#DDD4C3] bg-white text-sm tabular-nums"
+                            />
+                            {changeErrors.requestedDate && (
+                              <p className="mt-1 text-xs text-red-700">
+                                {changeErrors.requestedDate}
+                              </p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label
+                              htmlFor="change-time"
+                              className="block text-xs font-medium text-[#222523] mb-1"
+                            >
+                              New Preferred Time
+                            </label>
+                            <select
+                              id="change-time"
+                              value={changeForm.requestedTime}
+                              onChange={(e) =>
+                                setChangeForm({ ...changeForm, requestedTime: e.target.value })
+                              }
+                              className="w-full px-3 py-2 min-h-[42px] rounded-xl border border-[#DDD4C3] bg-white text-sm"
+                            >
+                              {PREFERRED_TIMES.map((slot) => (
+                                <option key={slot} value={slot}>
+                                  {slot}
+                                </option>
+                              ))}
+                            </select>
+                            {changeErrors.requestedTime && (
+                              <p className="mt-1 text-xs text-red-700">
+                                {changeErrors.requestedTime}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div>
+                        <label
+                          htmlFor="change-reason"
+                          className="block text-xs font-medium text-[#222523] mb-1"
+                        >
+                          Note or Reason <span className="text-[#525753] font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          id="change-reason"
+                          type="text"
+                          value={changeForm.reason}
+                          onChange={(e) => setChangeForm({ ...changeForm, reason: e.target.value })}
+                          placeholder="Any helpful details regarding your request..."
+                          className="w-full px-3 py-2 min-h-[42px] rounded-xl border border-[#DDD4C3] bg-white text-sm"
+                        />
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={isSubmittingChange}
+                        className="inline-flex items-center justify-center gap-2 px-5 py-2.5 min-h-[42px] text-xs sm:text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] disabled:opacity-60 rounded-xl transition-colors cursor-pointer"
+                      >
+                        {isSubmittingChange && (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+                        )}
+                        <span>
+                          {isSubmittingChange
+                            ? 'Sending Request...'
+                            : changeForm.requestType === 'cancel'
+                              ? 'Submit Cancellation Request'
+                              : 'Submit Reschedule Request'}
+                        </span>
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </motion.div>
       </div>

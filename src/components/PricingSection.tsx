@@ -1,4 +1,3 @@
-import { Pencil } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { PricingCategory, SiteConfig } from '../shared/types.ts';
 import { formatKesPrice } from '../utils/whatsapp.ts';
@@ -7,39 +6,22 @@ interface PricingSectionProps {
   config: SiteConfig;
   pricing: PricingCategory[];
   onRequestQuote: (houseType: string) => void;
-  onOpenOwnerPricing: () => void;
 }
 
-export function PricingSection({
-  config,
-  pricing,
-  onRequestQuote,
-  onOpenOwnerPricing,
-}: PricingSectionProps) {
+export function PricingSection({ config, pricing, onRequestQuote }: PricingSectionProps) {
   return (
     <section
       id="pricing"
       className="py-16 sm:py-22 lg:py-24 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-10">
-          <div className="max-w-2xl">
-            <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
-              Service Price List · Kenyan Shillings (KES)
-            </p>
-            <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance]">
-              Transparent quotations tailored to your home.
-            </h2>
-          </div>
-
-          <button
-            type="button"
-            onClick={onOpenOwnerPricing}
-            className="inline-flex items-center gap-2 self-start md:self-auto px-4 py-2.5 min-h-[42px] text-xs sm:text-sm font-medium text-[#1B4332] hover:text-white bg-[#FAF8F4] hover:bg-[#1B4332] border border-[#DDD4C3] hover:border-[#1B4332] rounded-xl transition-colors whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332]"
-          >
-            <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-            <span>Owner: Edit KES Prices</span>
-          </button>
+        <div className="max-w-2xl mb-10">
+          <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
+            Service Price List · Kenyan Shillings (KES)
+          </p>
+          <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance]">
+            Transparent quotations tailored to your home.
+          </h2>
         </div>
 
         <motion.div

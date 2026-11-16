@@ -57,14 +57,75 @@ export interface BookingRequestPayload {
   cleaningType: string;
   productPreference: string;
   instructions: string;
+  whatsappConsent: boolean;
 }
 
 export interface BookingRecord extends BookingRequestPayload {
   id: string;
   referenceCode: string;
   status: BookingStatus;
+  sentNotificationKeys?: string[];
   createdAt: string;
   updatedAt?: string;
+}
+
+export type BookingChangeRequestType = 'reschedule' | 'cancel';
+export type BookingChangeRequestStatus = 'pending' | 'reviewed' | 'completed';
+
+export interface BookingChangeRequestPayload {
+  referenceCode: string;
+  phoneNumber: string;
+  requestType: BookingChangeRequestType;
+  requestedDate: string;
+  requestedTime: string;
+  reason: string;
+}
+
+export interface BookingChangeRequestRecord extends BookingChangeRequestPayload {
+  id: string;
+  status: BookingChangeRequestStatus;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export type WhatsAppNotificationEvent =
+  | 'owner_new_booking'
+  | 'owner_cancel_request'
+  | 'owner_reschedule_request'
+  | 'customer_confirmed'
+  | 'customer_rescheduled'
+  | 'customer_cancelled';
+
+export interface WhatsAppNotificationRequest {
+  event: WhatsAppNotificationEvent;
+  idempotencyKey: string;
+  referenceCode: string;
+  customerName?: string;
+  customerPhone?: string;
+  locationEstate?: string;
+  houseType?: string;
+  cleaningType?: string;
+  preferredDate?: string;
+  preferredTime?: string;
+  requestedDate?: string;
+  requestedTime?: string;
+  productPreference?: string;
+  reason?: string;
+  whatsappConsent?: boolean;
+}
+
+export interface WhatsAppNotificationResponse {
+  ok: boolean;
+  sent: boolean;
+  status:
+    | 'sent'
+    | 'deduplicated'
+    | 'skipped_no_consent'
+    | 'provider_not_configured'
+    | 'invalid_recipient'
+    | 'provider_error';
+  message: string;
+  messageId?: string;
 }
 
 export interface PublicSiteData {

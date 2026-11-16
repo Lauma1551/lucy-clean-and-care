@@ -1,11 +1,10 @@
-import { Calendar, MessageCircle, Settings2, X } from 'lucide-react';
+import { Calendar, MessageCircle, X } from 'lucide-react';
 
 interface WhatsAppFallbackModalProps {
   businessName: string;
   isOpen: boolean;
   onClose: () => void;
   onGoToBooking: () => void;
-  onOpenOwnerContact: () => void;
 }
 
 export function WhatsAppFallbackModal({
@@ -13,7 +12,6 @@ export function WhatsAppFallbackModal({
   isOpen,
   onClose,
   onGoToBooking,
-  onOpenOwnerContact,
 }: WhatsAppFallbackModalProps) {
   if (!isOpen) return null;
 
@@ -41,38 +39,24 @@ export function WhatsAppFallbackModal({
         </div>
 
         <h3 id="whatsapp-setup-title" className="font-display text-xl font-medium text-[#222523] mb-2">
-          WhatsApp number not configured
+          WhatsApp currently unavailable
         </h3>
         <p className="text-sm text-[#525753] leading-relaxed mb-6">
-          {businessName} currently has no WhatsApp number saved. You can submit your cleaning
-          request using our online booking form, or open the Owner Portal to configure the number.
+          {businessName} currently has no WhatsApp number configured. Please submit your cleaning
+          request using our online booking form below.
         </p>
 
-        <div className="flex flex-col gap-2.5">
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onGoToBooking();
-            }}
-            className="inline-flex items-center justify-center gap-2 w-full px-5 py-3 min-h-[44px] text-sm font-medium text-white bg-[#4F6F58] hover:bg-[#3F5A47] rounded-xl transition-colors cursor-pointer"
-          >
-            <Calendar className="w-4 h-4" aria-hidden="true" />
-            <span>Submit Online Booking Request</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              onClose();
-              onOpenOwnerContact();
-            }}
-            className="inline-flex items-center justify-center gap-2 w-full px-5 py-3 min-h-[44px] text-sm font-medium text-[#222523] bg-[#F1ECE3] hover:bg-[#E7E0D3] border border-[#DFD6C7] rounded-xl transition-colors cursor-pointer"
-          >
-            <Settings2 className="w-4 h-4 text-[#4F6F58]" aria-hidden="true" />
-            <span>Owner: Configure WhatsApp Number</span>
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onGoToBooking();
+          }}
+          className="inline-flex items-center justify-center gap-2 w-full px-5 py-3 min-h-[44px] text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-xl transition-colors cursor-pointer"
+        >
+          <Calendar className="w-4 h-4" aria-hidden="true" />
+          <span>Submit Online Booking Request</span>
+        </button>
       </div>
     </div>
   );

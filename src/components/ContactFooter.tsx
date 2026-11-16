@@ -1,17 +1,20 @@
-import { ExternalLink, Mail, MapPin, MessageCircle, Phone, Settings2 } from 'lucide-react';
+import { ExternalLink, Mail, MapPin, MessageCircle, Phone } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import type { SiteConfig } from '../shared/types.ts';
 import { BrandMark } from './BrandMark.tsx';
 
 interface ContactFooterProps {
   config: SiteConfig;
   onWhatsAppClick: () => void;
-  onOpenOwnerPortal: (initialTab?: 'bookings' | 'pricing' | 'contact' | 'services') => void;
+  onNavigate: (path: string) => void;
+  onNavigateHomeSection: (sectionId?: string) => void;
 }
 
 export function ContactFooter({
   config,
   onWhatsAppClick,
-  onOpenOwnerPortal,
+  onNavigate,
+  onNavigateHomeSection,
 }: ContactFooterProps) {
   const socialEntries = [
     { key: 'instagram', label: 'Instagram', url: config.socialLinks.instagram },
@@ -21,6 +24,16 @@ export function ContactFooter({
   ] as const;
 
   const configuredSocials = socialEntries.filter((entry) => Boolean(entry.url));
+
+  const handleSectionLink = (e: MouseEvent<HTMLAnchorElement>, sectionId: string) => {
+    e.preventDefault();
+    onNavigateHomeSection(sectionId);
+  };
+
+  const handleLegalLink = (e: MouseEvent<HTMLAnchorElement>, path: string) => {
+    e.preventDefault();
+    onNavigate(path);
+  };
 
   return (
     <>
@@ -76,9 +89,7 @@ export function ContactFooter({
                         {config.telephone}
                       </a>
                     ) : (
-                      <p className="text-sm text-[#525753] mt-1">
-                        Telephone number can be added in Owner Portal
-                      </p>
+                      <p className="text-sm text-[#525753] mt-1">Available upon enquiry</p>
                     )}
                   </div>
                 </div>
@@ -95,47 +106,34 @@ export function ContactFooter({
                         {config.email}
                       </a>
                     ) : (
-                      <p className="text-sm text-[#525753] mt-1">
-                        Email address can be added in Owner Portal
-                      </p>
+                      <p className="text-sm text-[#525753] mt-1">Available upon enquiry</p>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-sm font-medium text-[#222523]">Social Media</h3>
-                  {configuredSocials.length > 0 ? (
-                    <div className="flex flex-wrap items-center gap-4 mt-2">
-                      {configuredSocials.map((social) => (
-                        <a
-                          key={social.key}
-                          href={social.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1B4332] hover:text-[#4F6F58] underline-offset-4 hover:underline"
-                        >
-                          <span>{social.label}</span>
-                          <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-[#525753] mt-1">
-                      Social media links can be added anytime in the Owner Portal.
-                    </p>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => onOpenOwnerPortal('contact')}
-                  className="inline-flex items-center gap-2 self-start sm:self-center px-3.5 py-2 min-h-[40px] text-xs font-medium text-[#1B4332] hover:text-white bg-[#F4EFE6] hover:bg-[#1B4332] border border-[#DDD4C3] hover:border-[#1B4332] rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  <Settings2 className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Edit Business Details</span>
-                </button>
+              <div className="p-6">
+                <h3 className="text-sm font-medium text-[#222523]">Social Media</h3>
+                {configuredSocials.length > 0 ? (
+                  <div className="flex flex-wrap items-center gap-4 mt-2">
+                    {configuredSocials.map((social) => (
+                      <a
+                        key={social.key}
+                        href={social.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-sm font-medium text-[#1B4332] hover:text-[#4F6F58] underline-offset-4 hover:underline"
+                      >
+                        <span>{social.label}</span>
+                        <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                      </a>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-[#525753] mt-1">
+                    Connect with {config.businessName} via phone, email, or WhatsApp.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -143,45 +141,68 @@ export function ContactFooter({
       </section>
 
       <footer className="bg-[#FAF8F4] py-10 sm:py-12">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
             <BrandMark variant="footer" logoText={config.logoText} />
             <div>
               <p className="font-display text-base sm:text-lg font-semibold text-[#1B4332]">
                 {config.businessName}
               </p>
-              <p className="text-sm text-[#525753] mt-0.5">
-                {config.tagline}
-              </p>
-              <p className="text-xs text-[#4F6F58] mt-1">
-                {config.city}
-              </p>
+              <p className="text-sm text-[#525753] mt-0.5">{config.tagline}</p>
+              <p className="text-xs text-[#4F6F58] mt-1">{config.city}</p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-[#525753]">
-            <a href="#about" className="hover:text-[#1B4332] transition-colors">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2.5 text-sm text-[#525753]">
+            <a
+              href="/#about"
+              onClick={(e) => handleSectionLink(e, 'about')}
+              className="hover:text-[#1B4332] transition-colors"
+            >
               About
             </a>
-            <a href="#services" className="hover:text-[#1B4332] transition-colors">
+            <a
+              href="/#services"
+              onClick={(e) => handleSectionLink(e, 'services')}
+              className="hover:text-[#1B4332] transition-colors"
+            >
               Services
             </a>
-            <a href="#pricing" className="hover:text-[#1B4332] transition-colors">
+            <a
+              href="/#pricing"
+              onClick={(e) => handleSectionLink(e, 'pricing')}
+              className="hover:text-[#1B4332] transition-colors"
+            >
               Pricing
             </a>
-            <a href="#team" className="hover:text-[#1B4332] transition-colors">
+            <a
+              href="/#team"
+              onClick={(e) => handleSectionLink(e, 'team')}
+              className="hover:text-[#1B4332] transition-colors"
+            >
               Founder
             </a>
-            <a href="#booking" className="hover:text-[#1B4332] transition-colors">
+            <a
+              href="/#booking"
+              onClick={(e) => handleSectionLink(e, 'booking')}
+              className="hover:text-[#1B4332] transition-colors"
+            >
               Book
             </a>
-            <button
-              type="button"
-              onClick={() => onOpenOwnerPortal('bookings')}
-              className="text-[#1B4332] hover:text-[#4F6F58] font-medium cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] rounded-sm"
+            <a
+              href="/privacy-policy"
+              onClick={(e) => handleLegalLink(e, '/privacy-policy')}
+              className="text-[#1B4332] hover:text-[#4F6F58] font-medium transition-colors"
             >
-              Owner Portal
-            </button>
+              Privacy Policy
+            </a>
+            <a
+              href="/terms-of-use"
+              onClick={(e) => handleLegalLink(e, '/terms-of-use')}
+              className="text-[#1B4332] hover:text-[#4F6F58] font-medium transition-colors"
+            >
+              Terms of Use
+            </a>
           </div>
         </div>
       </footer>

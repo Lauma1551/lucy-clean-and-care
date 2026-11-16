@@ -1,5 +1,6 @@
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import {
+  CalendarClock,
   Check,
   Loader2,
   Lock,
@@ -23,22 +24,28 @@ import {
   ensureInitialFirestoreSeed,
   extractReadableError,
   fetchOwnerBookings,
+  fetchOwnerChangeRequests,
+  isAuthorizedOwnerAccount,
   mapAuthErrorMessage,
   saveOwnerConfig,
   saveOwnerPricing,
   saveOwnerServices,
   signInOwnerWithGoogle,
   signOutOwner,
-  updateOwnerBookingStatus,
+  triggerWhatsAppNotification,
+  updateOwnerBookingDetails,
+  updateOwnerChangeRequestStatus,
   verifyOwnerAccess,
 } from '../lib/firestoreService.ts';
-import { CLEANING_TYPES, DEFAULT_SERVICES, HOUSE_TYPES } from '../shared/defaults.ts';
+import { CLEANING_TYPES, DEFAULT_SERVICES, HOUSE_TYPES, PREFERRED_TIMES } from '../shared/defaults.ts';
 import type {
+  BookingChangeRequestRecord,
   BookingRecord,
   BookingStatus,
   PricingCategory,
   ServiceItem,
   SiteConfig,
+  WhatsAppNotificationEvent,
 } from '../shared/types.ts';
 import { buildWhatsAppUrl, formatKesPrice } from '../utils/whatsapp.ts';
 
@@ -72,14 +79,19 @@ export function OwnerPortalModal({
   const [authReady, setAuthReady] = useState<boolean>(!isFirebaseConfigured);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isAuthorizedOwner, setIsAuthorizedOwner] = useState<boolean>(false);
+  const [accessDenied, setAccessDenied] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [changeRequests, setChangeRequests] = useState<BookingChangeRequestRecord[]>([]);
   const [bookingFilter, setBookingFilter] = useState<BookingFilter>('all');
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingsLoading, setBookingsLoading] = useState(false);
   const [pendingDeleteBookingId, setPendingDeleteBookingId] = useState<string | null>(null);
+  const [reschedulingBookingId, setReschedulingBookingId] = useState<string | null>(null);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState<string>(PREFERRED_TIMES[0]);
 
   const [draftPricing, setDraftPricing] = useState<
     Array<{
@@ -133,8 +145,12 @@ export function OwnerPortalModal({
     setBookingsLoading(true);
     setSaveError(null);
     try {
-      const list = await fetchOwnerBookings();
+      const [list, requests] = await Promise.all([
+        fetchOwnerBookings(),
+        fetchOwnerChangeRequests().catch(() => [] as BookingChangeRequestRecord[]),
+      ]);
       setBookings(list);
+      setChangeRequests(requests);
     } catch (error) {
       setSaveError(
         extractReadableError(error, 'Could not load bookings from Cloud Firestore.')
@@ -153,20 +169,41 @@ export function OwnerPortalModal({
     }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setCurrentUser(user);
-      setAuthError(null);
       if (!user) {
+        setCurrentUser(null);
         setIsAuthorizedOwner(false);
         setBookings([]);
         setAuthReady(true);
         return;
       }
 
+      if (!isAuthorizedOwnerAccount(user)) {
+        await signOutOwner().catch(() => {});
+        setCurrentUser(null);
+        setIsAuthorizedOwner(false);
+        setAccessDenied(true);
+        setBookings([]);
+        setAuthError(
+          'Access denied. This Google account is not authorized to access the private owner area.'
+        );
+        setAuthReady(true);
+        return;
+      }
+
+      setCurrentUser(user);
+      setAuthError(null);
+      setAccessDenied(false);
       setAuthLoading(true);
       try {
         const authorized = await verifyOwnerAccess();
         setIsAuthorizedOwner(authorized);
-        if (authorized) {
+        if (!authorized) {
+          await signOutOwner().catch(() => {});
+          setCurrentUser(null);
+          setAccessDenied(true);
+          setBookings([]);
+          setAuthError('Access denied. Owner verification failed in Cloud Firestore.');
+        } else {
           const seeded = await ensureInitialFirestoreSeed().catch(() => null);
           if (seeded) {
             onDataUpdated({
@@ -177,9 +214,12 @@ export function OwnerPortalModal({
           }
         }
       } catch (error) {
+        await signOutOwner().catch(() => {});
+        setCurrentUser(null);
         setIsAuthorizedOwner(false);
+        setAccessDenied(true);
         setAuthError(
-          extractReadableError(error, 'Could not verify owner permissions in Firestore.')
+          extractReadableError(error, 'Access denied. Could not verify owner permissions.')
         );
       } finally {
         setAuthLoading(false);
@@ -191,11 +231,11 @@ export function OwnerPortalModal({
   }, [onDataUpdated]);
 
   useEffect(() => {
-    if (!isOpen || !isAuthorizedOwner) return;
+    if (!isOpen || !isAuthorizedOwner || !isAuthorizedOwnerAccount(currentUser)) return;
     setSaveMessage(null);
     setSaveError(null);
     loadBookings();
-  }, [isOpen, isAuthorizedOwner, loadBookings]);
+  }, [isOpen, isAuthorizedOwner, currentUser, loadBookings]);
 
   const pendingCount = useMemo(
     () => bookings.filter((b) => b.status === 'pending').length,
@@ -227,6 +267,7 @@ export function OwnerPortalModal({
 
   const handleGoogleSignIn = async () => {
     setAuthError(null);
+    setAccessDenied(false);
     if (!isFirebaseConfigured) {
       setAuthError(
         activeFirebaseError || 'Firebase is not configured. Check your environment variables.'
@@ -237,13 +278,17 @@ export function OwnerPortalModal({
     setAuthLoading(true);
     try {
       const result = await signInOwnerWithGoogle();
-      setCurrentUser(result.user);
-      setIsAuthorizedOwner(result.authorized);
       if (!result.authorized) {
+        setCurrentUser(null);
+        setIsAuthorizedOwner(false);
+        setAccessDenied(true);
+        setBookings([]);
         setAuthError(
-          `Signed in as ${result.user.email || result.user.uid}, but this account is not authorized as an owner of ${config.businessName}.`
+          `Access denied. ${result.email} is not authorized to access this dashboard.`
         );
       } else {
+        setAccessDenied(false);
+        setIsAuthorizedOwner(true);
         const seeded = await ensureInitialFirestoreSeed().catch(() => null);
         if (seeded) {
           onDataUpdated({
@@ -275,19 +320,222 @@ export function OwnerPortalModal({
     }
   };
 
-  const handleUpdateBookingStatus = async (id: string, status: BookingStatus) => {
+  const sendCustomerNotificationIfEligible = async (
+    booking: BookingRecord,
+    event: Extract<
+      WhatsAppNotificationEvent,
+      'customer_confirmed' | 'customer_rescheduled' | 'customer_cancelled'
+    >,
+    dateValue: string,
+    timeValue: string
+  ): Promise<{ sentKey?: string; note: string }> => {
+    const dedupeKey =
+      event === 'customer_cancelled'
+        ? `customer_cancelled:${booking.referenceCode}`
+        : `${event}:${booking.referenceCode}:${dateValue}:${timeValue}`;
+
+    if (booking.sentNotificationKeys?.includes(dedupeKey)) {
+      return { note: 'Duplicate customer WhatsApp notification skipped.' };
+    }
+
+    if (!booking.whatsappConsent) {
+      return { note: 'Customer did not opt in to WhatsApp updates (not sent).' };
+    }
+
+    const res = await triggerWhatsAppNotification(
+      {
+        event,
+        idempotencyKey: dedupeKey,
+        referenceCode: booking.referenceCode,
+        customerName: booking.fullName,
+        customerPhone: booking.phoneNumber,
+        locationEstate: booking.locationEstate,
+        houseType: booking.houseType,
+        cleaningType: booking.cleaningType,
+        preferredDate: dateValue,
+        preferredTime: timeValue,
+        whatsappConsent: booking.whatsappConsent,
+      },
+      { requireOwnerAuth: true }
+    );
+
+    if (res.sent || res.status === 'deduplicated') {
+      return {
+        sentKey: dedupeKey,
+        note: res.sent
+          ? 'Customer notified via WhatsApp.'
+          : 'Duplicate customer WhatsApp notification skipped.',
+      };
+    }
+
+    return { note: `WhatsApp notice: ${res.message}` };
+  };
+
+  const handleUpdateBookingStatus = async (booking: BookingRecord, status: BookingStatus) => {
     setSaveError(null);
     setSaveMessage(null);
     try {
-      await updateOwnerBookingStatus(id, status);
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === id ? { ...b, status, updatedAt: new Date().toISOString() } : b
-        )
+      let sentKey: string | undefined;
+      let notifyNote = '';
+
+      if (status === 'confirmed' && booking.status !== 'confirmed') {
+        const notifyResult = await sendCustomerNotificationIfEligible(
+          booking,
+          'customer_confirmed',
+          booking.preferredDate,
+          booking.preferredTime
+        );
+        sentKey = notifyResult.sentKey;
+        notifyNote = notifyResult.note;
+      } else if (status === 'cancelled' && booking.status === 'confirmed') {
+        const notifyResult = await sendCustomerNotificationIfEligible(
+          booking,
+          'customer_cancelled',
+          booking.preferredDate,
+          booking.preferredTime
+        );
+        sentKey = notifyResult.sentKey;
+        notifyNote = notifyResult.note;
+      }
+
+      const updated = await updateOwnerBookingDetails(booking, {
+        status,
+        appendNotificationKey: sentKey,
+      });
+
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? updated : b)));
+      setSaveMessage(
+        notifyNote
+          ? `Booking status updated to ${status}. ${notifyNote}`
+          : 'Booking status updated in Firestore.'
       );
-      setSaveMessage('Booking status updated in Firestore.');
     } catch (error) {
       setSaveError(extractReadableError(error, 'Could not update booking status.'));
+    }
+  };
+
+  const handleSaveReschedule = async (booking: BookingRecord) => {
+    setSaveError(null);
+    setSaveMessage(null);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rescheduleDate) || !rescheduleTime.trim()) {
+      setSaveError('Please enter a valid appointment date and time.');
+      return;
+    }
+
+    try {
+      let sentKey: string | undefined;
+      let notifyNote = '';
+
+      if (booking.status === 'confirmed') {
+        const notifyResult = await sendCustomerNotificationIfEligible(
+          booking,
+          'customer_rescheduled',
+          rescheduleDate,
+          rescheduleTime
+        );
+        sentKey = notifyResult.sentKey;
+        notifyNote = notifyResult.note;
+      }
+
+      const updated = await updateOwnerBookingDetails(booking, {
+        preferredDate: rescheduleDate,
+        preferredTime: rescheduleTime,
+        appendNotificationKey: sentKey,
+      });
+
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? updated : b)));
+      setReschedulingBookingId(null);
+      setSaveMessage(
+        notifyNote
+          ? `Appointment updated in Firestore. ${notifyNote}`
+          : 'Appointment date and time updated in Firestore.'
+      );
+    } catch (error) {
+      setSaveError(extractReadableError(error, 'Could not update appointment schedule.'));
+    }
+  };
+
+  const handleResolveChangeRequest = async (
+    request: BookingChangeRequestRecord,
+    action: 'apply_reschedule' | 'apply_cancel' | 'mark_reviewed'
+  ) => {
+    setSaveError(null);
+    setSaveMessage(null);
+    try {
+      const matchingBooking = bookings.find(
+        (b) => b.referenceCode.toUpperCase() === request.referenceCode.toUpperCase()
+      );
+
+      let notifyNote = '';
+
+      if (action === 'apply_reschedule' && matchingBooking && request.requestedDate) {
+        const nextTime = request.requestedTime || matchingBooking.preferredTime;
+        let sentKey: string | undefined;
+        if (matchingBooking.status === 'confirmed' || matchingBooking.status === 'pending') {
+          const eventName: 'customer_confirmed' | 'customer_rescheduled' =
+            matchingBooking.status === 'confirmed' ? 'customer_rescheduled' : 'customer_confirmed';
+          const res = await sendCustomerNotificationIfEligible(
+            matchingBooking,
+            eventName,
+            request.requestedDate,
+            nextTime
+          );
+          sentKey = res.sentKey;
+          notifyNote = res.note;
+        }
+        const updatedBooking = await updateOwnerBookingDetails(matchingBooking, {
+          status: 'confirmed',
+          preferredDate: request.requestedDate,
+          preferredTime: nextTime,
+          appendNotificationKey: sentKey,
+        });
+        setBookings((prev) =>
+          prev.map((b) => (b.id === matchingBooking.id ? updatedBooking : b))
+        );
+        await updateOwnerChangeRequestStatus(request.id, 'completed');
+        setChangeRequests((prev) =>
+          prev.map((r) => (r.id === request.id ? { ...r, status: 'completed' } : r))
+        );
+        setSaveMessage(
+          `Reschedule applied to ${request.referenceCode}. ${notifyNote}`.trim()
+        );
+        return;
+      }
+
+      if (action === 'apply_cancel' && matchingBooking) {
+        let sentKey: string | undefined;
+        if (matchingBooking.status === 'confirmed') {
+          const res = await sendCustomerNotificationIfEligible(
+            matchingBooking,
+            'customer_cancelled',
+            matchingBooking.preferredDate,
+            matchingBooking.preferredTime
+          );
+          sentKey = res.sentKey;
+          notifyNote = res.note;
+        }
+        const updatedBooking = await updateOwnerBookingDetails(matchingBooking, {
+          status: 'cancelled',
+          appendNotificationKey: sentKey,
+        });
+        setBookings((prev) =>
+          prev.map((b) => (b.id === matchingBooking.id ? updatedBooking : b))
+        );
+        await updateOwnerChangeRequestStatus(request.id, 'completed');
+        setChangeRequests((prev) =>
+          prev.map((r) => (r.id === request.id ? { ...r, status: 'completed' } : r))
+        );
+        setSaveMessage(`Booking ${request.referenceCode} cancelled. ${notifyNote}`.trim());
+        return;
+      }
+
+      await updateOwnerChangeRequestStatus(request.id, 'reviewed');
+      setChangeRequests((prev) =>
+        prev.map((r) => (r.id === request.id ? { ...r, status: 'reviewed' } : r))
+      );
+      setSaveMessage(`Request for ${request.referenceCode} marked as reviewed.`);
+    } catch (error) {
+      setSaveError(extractReadableError(error, 'Could not process change request.'));
     }
   };
 
@@ -482,18 +730,28 @@ export function OwnerPortalModal({
               <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
               <span>Checking owner session...</span>
             </div>
-          ) : !currentUser ? (
+          ) : !currentUser || !isAuthorizedOwner || !isAuthorizedOwnerAccount(currentUser) ? (
             <div className="max-w-md mx-auto py-8">
-              <div className="w-11 h-11 rounded-full bg-[#DCE6DD] text-[#1B4332] flex items-center justify-center mb-4">
-                <Lock className="w-5 h-5" aria-hidden="true" />
+              <div
+                className={`w-11 h-11 rounded-full flex items-center justify-center mb-4 ${
+                  accessDenied
+                    ? 'bg-red-100 text-red-800'
+                    : 'bg-[#DCE6DD] text-[#1B4332]'
+                }`}
+              >
+                {accessDenied ? (
+                  <ShieldAlert className="w-5 h-5" aria-hidden="true" />
+                ) : (
+                  <Lock className="w-5 h-5" aria-hidden="true" />
+                )}
               </div>
               <h3 className="font-display text-2xl font-medium text-[#222523] mb-2">
-                Owner Sign-In
+                {accessDenied ? 'Access Denied' : 'Restricted Owner Access'}
               </h3>
               <p className="text-sm text-[#525753] leading-relaxed mb-6">
-                Sign in with your authorized {config.businessName} Google account to view customer
-                bookings, update KES prices, and manage services, founder details, and contact
-                information. Public registration is disabled.
+                {accessDenied
+                  ? `Only the specifically authorized ${config.businessName} owner account is permitted to access this area.`
+                  : `This private page is restricted to the authorized ${config.businessName} owner. Customer bookings and enquiries are handled on the main website.`}
               </p>
 
               {authError && (
@@ -502,51 +760,31 @@ export function OwnerPortalModal({
                 </div>
               )}
 
-              <button
-                type="button"
-                onClick={handleGoogleSignIn}
-                disabled={authLoading}
-                className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 min-h-[46px] text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] disabled:opacity-60 rounded-xl transition-colors cursor-pointer"
-              >
-                {authLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-                <span>{authLoading ? 'Signing in...' : 'Sign In with Authorized Google Account'}</span>
-              </button>
-            </div>
-          ) : !isAuthorizedOwner ? (
-            <div className="max-w-lg mx-auto py-8 space-y-4">
-              <div className="w-11 h-11 rounded-full bg-red-100 text-red-800 flex items-center justify-center">
-                <ShieldAlert className="w-5 h-5" aria-hidden="true" />
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleGoogleSignIn}
+                  disabled={authLoading}
+                  className="w-full inline-flex items-center justify-center gap-2.5 px-5 py-3 min-h-[46px] text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] disabled:opacity-60 rounded-xl transition-colors cursor-pointer"
+                >
+                  {authLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
+                  <span>
+                    {authLoading
+                      ? 'Verifying...'
+                      : accessDenied
+                        ? 'Sign In with Authorized Account'
+                        : 'Owner Google Sign-In'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full inline-flex items-center justify-center px-5 py-3 min-h-[44px] text-sm font-medium text-[#1B4332] bg-[#F4EFE6] hover:bg-[#E9E2D4] border border-[#DDD4C3] rounded-xl transition-colors cursor-pointer"
+                >
+                  Return to Website
+                </button>
               </div>
-              <h3 className="font-display text-2xl font-medium text-[#222523]">
-                Owner Access Restricted
-              </h3>
-              <p className="text-sm text-[#525753] leading-relaxed">
-                You are currently signed in as{' '}
-                <strong className="text-[#222523]">{currentUser.email || currentUser.uid}</strong>,
-                which does not have owner permissions in Firestore security rules.
-              </p>
-              {authError && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-800">
-                  {authError}
-                </div>
-              )}
-              <div className="p-4 rounded-xl bg-[#F4EFE6] border border-[#DDD4C3] text-xs text-[#525753] space-y-1">
-                <p className="font-medium text-[#222523]">To authorize this account:</p>
-                <p>
-                  Sign in with an owner email configured in <code className="font-mono">firestore.rules</code>,
-                  or create a document in Firestore at{' '}
-                  <code className="font-mono">admins/{currentUser.uid}</code> with{' '}
-                  <code className="font-mono">{`{ "email": "${currentUser.email || ''}", "role": "owner" }`}</code>.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleSignOut}
-                className="inline-flex items-center gap-2 px-5 py-2.5 min-h-[42px] text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-xl cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" aria-hidden="true" />
-                <span>Sign Out &amp; Switch Account</span>
-              </button>
             </div>
           ) : (
             <div>
@@ -680,6 +918,93 @@ export function OwnerPortalModal({
                     </div>
                   </div>
 
+                  {changeRequests.some((r) => r.status === 'pending') && (
+                    <div className="p-4 rounded-xl border border-[#1B4332]/25 bg-[#F4EFE6]/80 space-y-3">
+                      <div className="flex items-center gap-2 text-xs font-medium text-[#1B4332]">
+                        <CalendarClock className="w-4 h-4" aria-hidden="true" />
+                        <span>
+                          Customer Reschedule &amp; Cancellation Requests (
+                          {changeRequests.filter((r) => r.status === 'pending').length} pending)
+                        </span>
+                      </div>
+                      <div className="space-y-2.5">
+                        {changeRequests
+                          .filter((r) => r.status === 'pending')
+                          .map((req) => {
+                            const matched = bookings.find(
+                              (b) =>
+                                b.referenceCode.toUpperCase() === req.referenceCode.toUpperCase()
+                            );
+                            return (
+                              <div
+                                key={req.id}
+                                className="p-3.5 rounded-xl bg-white border border-[#DDD4C3] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                              >
+                                <div className="space-y-1">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono font-semibold text-[#1B4332]">
+                                      {req.referenceCode}
+                                    </span>
+                                    <span className="font-medium text-[#222523]">
+                                      {req.requestType === 'cancel'
+                                        ? 'Cancellation Request'
+                                        : 'Reschedule Request'}
+                                    </span>
+                                    <span className="text-[#525753] tabular-nums">
+                                      · {req.phoneNumber}
+                                    </span>
+                                  </div>
+                                  {req.requestType === 'reschedule' && (
+                                    <p className="text-[#222523]">
+                                      Requested: <strong>{req.requestedDate}</strong> ·{' '}
+                                      {req.requestedTime}
+                                    </p>
+                                  )}
+                                  {req.reason && (
+                                    <p className="text-[#525753]">Note: {req.reason}</p>
+                                  )}
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                  {matched && req.requestType === 'reschedule' && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleResolveChangeRequest(req, 'apply_reschedule')
+                                      }
+                                      className="px-3 py-1.5 min-h-[34px] text-xs font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-lg cursor-pointer"
+                                    >
+                                      Apply &amp; Notify
+                                    </button>
+                                  )}
+                                  {matched && req.requestType === 'cancel' && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handleResolveChangeRequest(req, 'apply_cancel')
+                                      }
+                                      className="px-3 py-1.5 min-h-[34px] text-xs font-medium text-white bg-red-700 hover:bg-red-800 rounded-lg cursor-pointer"
+                                    >
+                                      Cancel Booking
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      handleResolveChangeRequest(req, 'mark_reviewed')
+                                    }
+                                    className="px-3 py-1.5 min-h-[34px] text-xs font-medium text-[#525753] bg-[#F4EFE6] hover:bg-[#E7E0D3] rounded-lg cursor-pointer"
+                                  >
+                                    Mark Reviewed
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  )}
+
                   {bookingsLoading ? (
                     <div className="py-12 flex items-center justify-center text-sm text-[#525753] gap-2">
                       <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
@@ -705,6 +1030,7 @@ export function OwnerPortalModal({
                         `Hello ${booking.fullName}, thank you for contacting ${config.businessName} regarding your ${booking.houseType} cleaning request (${booking.referenceCode}).`
                       );
                       const isConfirmingDelete = pendingDeleteBookingId === booking.id;
+                      const isRescheduling = reschedulingBookingId === booking.id;
                       return (
                         <div
                           key={booking.id}
@@ -712,10 +1038,14 @@ export function OwnerPortalModal({
                         >
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                             <div>
-                              <span className="text-xs font-medium text-[#4F6F58] tabular-nums">
-                                {booking.referenceCode} · {booking.preferredDate} (
-                                {booking.preferredTime})
-                              </span>
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[#DCE6DD]/70 text-[#1B4332]">
+                                  {booking.referenceCode}
+                                </span>
+                                <span className="text-xs font-medium text-[#4F6F58] tabular-nums">
+                                  {booking.preferredDate} ({booking.preferredTime})
+                                </span>
+                              </div>
                               <h4 className="font-display text-lg font-medium text-[#222523]">
                                 {booking.fullName}
                               </h4>
@@ -724,7 +1054,19 @@ export function OwnerPortalModal({
                                 {new Date(booking.createdAt).toLocaleString('en-KE', {
                                   dateStyle: 'medium',
                                   timeStyle: 'short',
-                                })}
+                                })}{' '}
+                                ·{' '}
+                                <span
+                                  className={
+                                    booking.whatsappConsent
+                                      ? 'text-[#1B4332] font-medium'
+                                      : 'text-[#525753]'
+                                  }
+                                >
+                                  {booking.whatsappConsent
+                                    ? 'WhatsApp Updates: Opted In'
+                                    : 'WhatsApp Updates: No Opt-In'}
+                                </span>
                               </p>
                             </div>
 
@@ -732,7 +1074,7 @@ export function OwnerPortalModal({
                               {booking.status === 'pending' && (
                                 <button
                                   type="button"
-                                  onClick={() => handleUpdateBookingStatus(booking.id, 'confirmed')}
+                                  onClick={() => handleUpdateBookingStatus(booking, 'confirmed')}
                                   className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#DCE6DD] hover:bg-[#c8dac9] rounded-lg transition-colors cursor-pointer"
                                 >
                                   Confirm
@@ -741,18 +1083,33 @@ export function OwnerPortalModal({
                               {booking.status === 'confirmed' && (
                                 <button
                                   type="button"
-                                  onClick={() => handleUpdateBookingStatus(booking.id, 'completed')}
+                                  onClick={() => handleUpdateBookingStatus(booking, 'completed')}
                                   className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#DCE6DD] hover:bg-[#c8dac9] rounded-lg transition-colors cursor-pointer"
                                 >
                                   Mark Completed
                                 </button>
                               )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (isRescheduling) {
+                                    setReschedulingBookingId(null);
+                                  } else {
+                                    setReschedulingBookingId(booking.id);
+                                    setRescheduleDate(booking.preferredDate);
+                                    setRescheduleTime(booking.preferredTime || PREFERRED_TIMES[0]);
+                                  }
+                                }}
+                                className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#525753] hover:text-[#1B4332] bg-[#FAF8F4] border border-[#DFD6C7] rounded-lg transition-colors cursor-pointer"
+                              >
+                                {isRescheduling ? 'Close Edit' : 'Reschedule'}
+                              </button>
                               <select
                                 aria-label={`Status for ${booking.fullName}`}
                                 value={booking.status}
                                 onChange={(e) =>
                                   handleUpdateBookingStatus(
-                                    booking.id,
+                                    booking,
                                     e.target.value as BookingStatus
                                   )
                                 }
@@ -805,6 +1162,47 @@ export function OwnerPortalModal({
                               )}
                             </div>
                           </div>
+
+                          {isRescheduling && (
+                            <div className="p-3.5 rounded-xl bg-[#FAF8F4] border border-[#DFD6C7] grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
+                              <div className="sm:col-span-4">
+                                <label className="block text-xs text-[#525753] mb-1">
+                                  Appointment Date
+                                </label>
+                                <input
+                                  type="date"
+                                  value={rescheduleDate}
+                                  onChange={(e) => setRescheduleDate(e.target.value)}
+                                  className="w-full px-3 py-2 min-h-[38px] rounded-lg border border-[#DFD6C7] bg-white text-xs tabular-nums"
+                                />
+                              </div>
+                              <div className="sm:col-span-5">
+                                <label className="block text-xs text-[#525753] mb-1">
+                                  Appointment Time
+                                </label>
+                                <select
+                                  value={rescheduleTime}
+                                  onChange={(e) => setRescheduleTime(e.target.value)}
+                                  className="w-full px-3 py-2 min-h-[38px] rounded-lg border border-[#DFD6C7] bg-white text-xs"
+                                >
+                                  {PREFERRED_TIMES.map((slot) => (
+                                    <option key={slot} value={slot}>
+                                      {slot}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="sm:col-span-3">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveReschedule(booking)}
+                                  className="w-full px-3 py-2 min-h-[38px] text-xs font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-lg cursor-pointer"
+                                >
+                                  Save Schedule
+                                </button>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs sm:text-sm text-[#525753]">
                             <div>

@@ -51,7 +51,8 @@ export interface FirestoreErrorInfo {
 }
 
 function readEnvString(key: string): string {
-  const val = (import.meta.env as Record<string, unknown>)[key];
+  const env = (import.meta as unknown as { env?: Record<string, unknown> }).env;
+  const val = env ? env[key] : undefined;
   return typeof val === 'string' ? val.trim() : '';
 }
 

@@ -23,6 +23,9 @@ import {
   PRODUCT_PREFERENCES,
 } from '../shared/defaults.ts';
 import type {
+  BookingChangeRequestPayload,
+  BookingChangeRequestRecord,
+  BookingChangeRequestStatus,
   BookingRecord,
   BookingRequestPayload,
   BookingStatus,
@@ -30,6 +33,8 @@ import type {
   PublicSiteData,
   ServiceItem,
   SiteConfig,
+  WhatsAppNotificationRequest,
+  WhatsAppNotificationResponse,
 } from '../shared/types.ts';
 import {
   extractReadableError,
@@ -74,14 +79,16 @@ function sanitizeOptionalUrl(value: unknown): string {
   }
 }
 
+const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
 export function generateBookingReferenceCode(): string {
-  const year = new Date().getFullYear();
-  const bytes = new Uint8Array(2);
+  const bytes = new Uint8Array(6);
   crypto.getRandomValues(bytes);
-  const suffix = Array.from(bytes, (b) => b.toString(16).padStart(2, '0'))
-    .join('')
-    .toUpperCase();
-  return `LCC-${year}-${suffix}`;
+  let suffix = '';
+  for (let i = 0; i < 6; i += 1) {
+    suffix += REFERENCE_ALPHABET[bytes[i] % REFERENCE_ALPHABET.length];
+  }
+  return `LCC-${suffix}`;
 }
 
 export interface LoadedSiteResult {
@@ -232,6 +239,7 @@ export async function submitCustomerBooking(
     cleaningType: sanitizeText(payload.cleaningType, 80),
     productPreference: sanitizeText(payload.productPreference, 120),
     instructions: sanitizeText(payload.instructions, 1000),
+    whatsappConsent: Boolean(payload.whatsappConsent),
   };
 
   const bookingId = crypto.randomUUID();
@@ -241,6 +249,7 @@ export async function submitCustomerBooking(
     await setDoc(doc(firestore, 'bookings', bookingId), {
       referenceCode,
       ...sanitized,
+      sentNotificationKeys: [],
       status: 'pending' as BookingStatus,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -253,16 +262,147 @@ export async function submitCustomerBooking(
     id: bookingId,
     referenceCode,
     ...sanitized,
+    sentNotificationKeys: [],
     status: 'pending',
     createdAt: new Date().toISOString(),
   };
+}
+
+export function validateBookingChangeRequestPayload(
+  payload: BookingChangeRequestPayload
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const ref = payload.referenceCode.trim().toUpperCase();
+  if (!/^LCC-([A-Z0-9]{6}|[0-9]{4}-[A-Z0-9]{4,8})$/.test(ref)) {
+    errors.referenceCode = 'Enter your booking reference in the format LCC-XXXXXX.';
+  }
+  const phoneDigits = payload.phoneNumber.replace(/[^\d]/g, '');
+  if (phoneDigits.length < 9 || phoneDigits.length > 15) {
+    errors.phoneNumber = 'Enter the phone number used when booking.';
+  }
+  if (payload.requestType === 'reschedule') {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(payload.requestedDate)) {
+      errors.requestedDate = 'Please choose your new preferred date.';
+    }
+    if (!payload.requestedTime.trim()) {
+      errors.requestedTime = 'Please choose your new preferred time window.';
+    }
+  }
+  return errors;
+}
+
+export async function submitBookingChangeRequest(
+  payload: BookingChangeRequestPayload
+): Promise<BookingChangeRequestRecord> {
+  const firestore = requireFirestore();
+  const requestId = crypto.randomUUID();
+  const cleanPayload: BookingChangeRequestPayload = {
+    referenceCode: sanitizeText(payload.referenceCode.toUpperCase(), 24),
+    phoneNumber: sanitizeText(payload.phoneNumber, 30),
+    requestType: payload.requestType === 'cancel' ? 'cancel' : 'reschedule',
+    requestedDate:
+      payload.requestType === 'reschedule' ? sanitizeText(payload.requestedDate, 10) : '',
+    requestedTime:
+      payload.requestType === 'reschedule' ? sanitizeText(payload.requestedTime, 60) : '',
+    reason: sanitizeText(payload.reason, 500),
+  };
+
+  try {
+    await setDoc(doc(firestore, 'bookingChangeRequests', requestId), {
+      ...cleanPayload,
+      status: 'pending' as BookingChangeRequestStatus,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, `bookingChangeRequests/${requestId}`);
+  }
+
+  return {
+    id: requestId,
+    ...cleanPayload,
+    status: 'pending',
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export async function triggerWhatsAppNotification(
+  payload: WhatsAppNotificationRequest,
+  options?: { requireOwnerAuth?: boolean }
+): Promise<WhatsAppNotificationResponse> {
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (options?.requireOwnerAuth) {
+      const firebaseAuth = requireAuth();
+      const user = firebaseAuth.currentUser;
+      if (!user) {
+        return {
+          ok: false,
+          sent: false,
+          status: 'provider_error',
+          message: 'Owner authentication session required to notify customers.',
+        };
+      }
+      const idToken = await user.getIdToken();
+      headers.Authorization = `Bearer ${idToken}`;
+    }
+
+    const res = await fetch('/api/whatsapp/notify', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    const data = (await res.json().catch(() => null)) as WhatsAppNotificationResponse | null;
+    if (!data) {
+      return {
+        ok: false,
+        sent: false,
+        status: 'provider_error',
+        message: `Notification service returned HTTP ${res.status}.`,
+      };
+    }
+    return data;
+  } catch (error) {
+    return {
+      ok: false,
+      sent: false,
+      status: 'provider_error',
+      message:
+        error instanceof Error
+          ? error.message
+          : 'Could not reach server-side WhatsApp notification endpoint.',
+    };
+  }
+}
+
+export const AUTHORIZED_OWNER_EMAIL = 'aumalucy015@gmail.com';
+
+export function isAuthorizedOwnerAccount(user: User | null | undefined): boolean {
+  if (!user || !user.email || user.emailVerified !== true) {
+    return false;
+  }
+  return user.email.trim().toLowerCase() === AUTHORIZED_OWNER_EMAIL;
+}
+
+function requireAuthorizedOwner(): void {
+  const firebaseAuth = requireAuth();
+  if (!isAuthorizedOwnerAccount(firebaseAuth.currentUser)) {
+    throw new Error(
+      'Access denied. Only the authorized business owner account can access or modify private data.'
+    );
+  }
 }
 
 export async function verifyOwnerAccess(): Promise<boolean> {
   const firebaseAuth = requireAuth();
   const firestore = requireFirestore();
   const user = firebaseAuth.currentUser;
-  if (!user) return false;
+  if (!isAuthorizedOwnerAccount(user)) {
+    return false;
+  }
 
   try {
     await getDocs(query(collection(firestore, 'bookings'), limit(1)));
@@ -273,16 +413,18 @@ export async function verifyOwnerAccess(): Promise<boolean> {
 }
 
 export async function signInOwnerWithGoogle(): Promise<{
-  user: User;
+  email: string;
   authorized: boolean;
 }> {
   const firebaseAuth = requireAuth();
   const result = await signInWithPopup(firebaseAuth, googleProvider);
+  const signedInEmail = result.user.email || result.user.uid;
   const authorized = await verifyOwnerAccess();
   if (!authorized) {
-    return { user: result.user, authorized: false };
+    await signOut(firebaseAuth).catch(() => {});
+    return { email: signedInEmail, authorized: false };
   }
-  return { user: result.user, authorized: true };
+  return { email: signedInEmail, authorized: true };
 }
 
 export async function signOutOwner(): Promise<void> {
@@ -291,6 +433,7 @@ export async function signOutOwner(): Promise<void> {
 }
 
 export async function ensureInitialFirestoreSeed(): Promise<PublicSiteData | null> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
   const status = await fetchPublicSiteData();
 
@@ -335,6 +478,7 @@ export async function ensureInitialFirestoreSeed(): Promise<PublicSiteData | nul
 }
 
 export async function fetchOwnerBookings(): Promise<BookingRecord[]> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
   try {
     const snapshot = await getDocs(
@@ -358,6 +502,10 @@ export async function fetchOwnerBookings(): Promise<BookingRecord[]> {
         cleaningType: raw.cleaningType || CLEANING_TYPES[0],
         productPreference: raw.productPreference || PRODUCT_PREFERENCES[0],
         instructions: raw.instructions || '',
+        whatsappConsent: Boolean(raw.whatsappConsent),
+        sentNotificationKeys: Array.isArray(raw.sentNotificationKeys)
+          ? raw.sentNotificationKeys.filter((k): k is string => typeof k === 'string')
+          : [],
         status: (raw.status as BookingStatus) || 'pending',
         createdAt: toIsoString(raw.createdAt) || new Date().toISOString(),
         updatedAt: toIsoString(raw.updatedAt),
@@ -368,22 +516,109 @@ export async function fetchOwnerBookings(): Promise<BookingRecord[]> {
   }
 }
 
-export async function updateOwnerBookingStatus(
-  bookingId: string,
-  status: BookingStatus
-): Promise<void> {
+export async function fetchOwnerChangeRequests(): Promise<BookingChangeRequestRecord[]> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
   try {
-    await updateDoc(doc(firestore, 'bookings', bookingId), {
+    const snapshot = await getDocs(
+      query(collection(firestore, 'bookingChangeRequests'), orderBy('createdAt', 'desc'))
+    );
+    return snapshot.docs.map((snap) => {
+      const raw = snap.data() as Partial<BookingChangeRequestRecord> & {
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      return {
+        id: snap.id,
+        referenceCode: raw.referenceCode || '',
+        phoneNumber: raw.phoneNumber || '',
+        requestType: raw.requestType === 'cancel' ? 'cancel' : 'reschedule',
+        requestedDate: raw.requestedDate || '',
+        requestedTime: raw.requestedTime || '',
+        reason: raw.reason || '',
+        status: (raw.status as BookingChangeRequestStatus) || 'pending',
+        createdAt: toIsoString(raw.createdAt) || new Date().toISOString(),
+        updatedAt: toIsoString(raw.updatedAt),
+      };
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, 'bookingChangeRequests');
+  }
+}
+
+export async function updateOwnerBookingDetails(
+  booking: BookingRecord,
+  updates: {
+    status?: BookingStatus;
+    preferredDate?: string;
+    preferredTime?: string;
+    appendNotificationKey?: string;
+  }
+): Promise<BookingRecord> {
+  requireAuthorizedOwner();
+  const firestore = requireFirestore();
+  const existingKeys = Array.isArray(booking.sentNotificationKeys)
+    ? booking.sentNotificationKeys
+    : [];
+  const nextKeys =
+    updates.appendNotificationKey && !existingKeys.includes(updates.appendNotificationKey)
+      ? [...existingKeys, updates.appendNotificationKey].slice(-30)
+      : existingKeys;
+
+  const nextStatus = updates.status ?? booking.status;
+  const nextDate = updates.preferredDate ?? booking.preferredDate;
+  const nextTime = updates.preferredTime ?? booking.preferredTime;
+
+  try {
+    await updateDoc(doc(firestore, 'bookings', booking.id), {
+      status: nextStatus,
+      preferredDate: nextDate,
+      preferredTime: nextTime,
+      whatsappConsent: Boolean(booking.whatsappConsent),
+      sentNotificationKeys: nextKeys,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, `bookings/${booking.id}`);
+  }
+
+  return {
+    ...booking,
+    status: nextStatus,
+    preferredDate: nextDate,
+    preferredTime: nextTime,
+    whatsappConsent: Boolean(booking.whatsappConsent),
+    sentNotificationKeys: nextKeys,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+export async function updateOwnerBookingStatus(
+  booking: BookingRecord,
+  status: BookingStatus,
+  appendNotificationKey?: string
+): Promise<BookingRecord> {
+  return updateOwnerBookingDetails(booking, { status, appendNotificationKey });
+}
+
+export async function updateOwnerChangeRequestStatus(
+  requestId: string,
+  status: BookingChangeRequestStatus
+): Promise<void> {
+  requireAuthorizedOwner();
+  const firestore = requireFirestore();
+  try {
+    await updateDoc(doc(firestore, 'bookingChangeRequests', requestId), {
       status,
       updatedAt: serverTimestamp(),
     });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `bookings/${bookingId}`);
+    handleFirestoreError(error, OperationType.UPDATE, `bookingChangeRequests/${requestId}`);
   }
 }
 
 export async function deleteOwnerBooking(bookingId: string): Promise<void> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
   try {
     await deleteDoc(doc(firestore, 'bookings', bookingId));
@@ -396,6 +631,7 @@ export async function saveOwnerPricing(
   tiers: PricingCategory[],
   deletedIds: string[] = []
 ): Promise<PricingCategory[]> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
   const batch = writeBatch(firestore);
   const nowIso = new Date().toISOString();
@@ -447,6 +683,7 @@ export async function saveOwnerPricing(
 }
 
 export async function saveOwnerConfig(input: SiteConfig): Promise<SiteConfig> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
 
   if (input.businessName.trim().length < 2) {
@@ -503,6 +740,7 @@ export async function saveOwnerServices(
   services: ServiceItem[],
   deletedIds: string[] = []
 ): Promise<ServiceItem[]> {
+  requireAuthorizedOwner();
   const firestore = requireFirestore();
   const batch = writeBatch(firestore);
   const nowIso = new Date().toISOString();

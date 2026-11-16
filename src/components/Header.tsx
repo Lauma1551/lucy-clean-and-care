@@ -1,26 +1,36 @@
 import { Menu, X } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { BrandMark } from './BrandMark.tsx';
 
 interface HeaderProps {
   logoText: string;
   businessName: string;
   onBookClick: () => void;
+  onNavigateHomeSection?: (sectionId?: string) => void;
 }
 
 const NAV_LINKS = [
-  { href: '#about', label: 'About' },
-  { href: '#services', label: 'Services' },
-  { href: '#pricing', label: 'Pricing' },
-  { href: '#team', label: 'Founder' },
-  { href: '#contact', label: 'Contact' },
+  { href: '#about', id: 'about', label: 'About' },
+  { href: '#services', id: 'services', label: 'Services' },
+  { href: '#pricing', id: 'pricing', label: 'Pricing' },
+  { href: '#team', id: 'team', label: 'Founder' },
+  { href: '#contact', id: 'contact', label: 'Contact' },
 ] as const;
 
-export function Header({ logoText, businessName, onBookClick }: HeaderProps) {
+export function Header({
+  logoText,
+  businessName,
+  onBookClick,
+  onNavigateHomeSection,
+}: HeaderProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const handleMobileNav = () => {
+  const handleLinkClick = (e: MouseEvent<HTMLAnchorElement>, sectionId?: string) => {
     setMobileMenuOpen(false);
+    if (onNavigateHomeSection) {
+      e.preventDefault();
+      onNavigateHomeSection(sectionId);
+    }
   };
 
   return (
@@ -28,7 +38,8 @@ export function Header({ logoText, businessName, onBookClick }: HeaderProps) {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[72px] flex items-center justify-between gap-8">
         {/* Zone 1: Brand Wordmark */}
         <a
-          href="#top"
+          href="/#top"
+          onClick={(e) => handleLinkClick(e)}
           className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] rounded-md py-1 whitespace-nowrap shrink-0"
           aria-label={`${businessName} Home`}
         >
@@ -43,7 +54,8 @@ export function Header({ logoText, businessName, onBookClick }: HeaderProps) {
           {NAV_LINKS.map((link) => (
             <a
               key={link.href}
-              href={link.href}
+              href={`/${link.href}`}
+              onClick={(e) => handleLinkClick(e, link.id)}
               className="whitespace-nowrap shrink-0 hover:text-[#1B4332] transition-colors duration-150 py-1.5 border-b-2 border-transparent hover:border-[#1B4332] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] rounded-sm"
             >
               {link.label}
@@ -82,8 +94,8 @@ export function Header({ logoText, businessName, onBookClick }: HeaderProps) {
           {NAV_LINKS.map((link) => (
             <a
               key={link.href}
-              href={link.href}
-              onClick={handleMobileNav}
+              href={`/${link.href}`}
+              onClick={(e) => handleLinkClick(e, link.id)}
               className="block px-3 py-3 min-h-[44px] text-base font-medium text-[#222523] rounded-xl hover:bg-[#F4EFE6] hover:text-[#1B4332] transition-colors"
             >
               {link.label}

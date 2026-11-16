@@ -17,7 +17,13 @@ import type {
   PricingCategory,
   ServiceItem,
   SiteConfig,
+  WhatsAppNotificationRequest,
 } from './src/shared/types.ts';
+import {
+  getWhatsAppReadiness,
+  loadWhatsAppEnvConfig,
+  processWhatsAppNotification,
+} from './server/whatsappService.ts';
 
 interface PersistedStore {
   configVersion?: number;
@@ -221,10 +227,15 @@ function sanitizeOptionalUrl(value: unknown): string {
   }
 }
 
+const REFERENCE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
 function generateReferenceCode(): string {
-  const year = new Date().getFullYear();
-  const suffix = crypto.randomBytes(2).toString('hex').toUpperCase();
-  return `LCC-${year}-${suffix}`;
+  const bytes = crypto.randomBytes(6);
+  let suffix = '';
+  for (let i = 0; i < 6; i += 1) {
+    suffix += REFERENCE_ALPHABET[bytes[i] % REFERENCE_ALPHABET.length];
+  }
+  return `LCC-${suffix}`;
 }
 
 async function startServer() {
@@ -307,6 +318,7 @@ async function startServer() {
       cleaningType,
       productPreference,
       instructions,
+      whatsappConsent: Boolean(body.whatsappConsent),
       status: 'pending',
       createdAt: new Date().toISOString(),
     };
@@ -317,173 +329,22 @@ async function startServer() {
     res.status(201).json({ booking: record });
   });
 
-  app.get('/api/owner/status', (_req, res) => {
-    const store = readStore();
-    res.json({
-      isPasscodeConfigured: isPasscodeConfigured(store),
+  app.get('/api/whatsapp/status', (_req, res) => {
+    const readiness = getWhatsAppReadiness(loadWhatsAppEnvConfig());
+    res.json(readiness);
+  });
+
+  app.post('/api/whatsapp/notify', async (req, res) => {
+    const payload = req.body as WhatsAppNotificationRequest;
+    const result = await processWhatsAppNotification({
+      payload,
+      authorizationHeader: req.headers.authorization,
     });
+    res.status(result.statusCode).json(result.body);
   });
 
-  app.post('/api/owner/setup', (req, res) => {
-    const store = readStore();
-    if (isPasscodeConfigured(store)) {
-      res.status(409).json({ error: 'An owner passcode is already configured. Please sign in.' });
-      return;
-    }
-    const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode.trim() : '';
-    if (passcode.length < 4 || passcode.length > 64) {
-      res.status(400).json({ error: 'Passcode must be between 4 and 64 characters.' });
-      return;
-    }
-    const salt = crypto.randomBytes(16).toString('hex');
-    const hash = hashPasscode(passcode, salt);
-    store.ownerAuth = { salt, hash };
-    writeStore(store);
-
-    const token = signSessionToken(store.sessionSecret);
-    res.status(201).json({ token });
-  });
-
-  app.post('/api/owner/login', (req, res) => {
-    const store = readStore();
-    if (!isPasscodeConfigured(store)) {
-      res.status(400).json({ error: 'Owner passcode has not been configured yet.' });
-      return;
-    }
-    const passcode = typeof req.body?.passcode === 'string' ? req.body.passcode.trim() : '';
-    if (!verifyPasscode(store, passcode)) {
-      res.status(401).json({ error: 'Incorrect passcode. Please try again.' });
-      return;
-    }
-    const token = signSessionToken(store.sessionSecret);
-    res.json({ token });
-  });
-
-  app.get('/api/owner/bookings', requireOwnerAuth, (_req, res) => {
-    const store = readStore();
-    res.json({ bookings: store.bookings });
-  });
-
-  app.patch('/api/owner/bookings/:id', requireOwnerAuth, (req, res) => {
-    const bookingId = sanitizeText(req.params.id, 64);
-    const status = sanitizeText(req.body?.status, 24) as BookingStatus;
-    const validStatuses: BookingStatus[] = ['pending', 'confirmed', 'completed', 'cancelled'];
-    if (!validStatuses.includes(status)) {
-      res.status(400).json({ error: 'Invalid booking status.' });
-      return;
-    }
-
-    const store = readStore();
-    const index = store.bookings.findIndex((b) => b.id === bookingId);
-    if (index === -1) {
-      res.status(404).json({ error: 'Booking not found.' });
-      return;
-    }
-
-    store.bookings[index] = {
-      ...store.bookings[index],
-      status,
-    };
-    writeStore(store);
-    res.json({ booking: store.bookings[index] });
-  });
-
-  app.put('/api/owner/pricing', requireOwnerAuth, (req, res) => {
-    const incoming = req.body?.pricing;
-    if (!Array.isArray(incoming)) {
-      res.status(400).json({ error: 'Invalid pricing payload.' });
-      return;
-    }
-
-    const store = readStore();
-    const updatedPricing: PricingCategory[] = store.pricing.map((existing) => {
-      const match = incoming.find((item: unknown) => (item as PricingCategory)?.id === existing.id) as
-        | Partial<PricingCategory>
-        | undefined;
-      if (!match) return existing;
-
-      let priceKes: number | null = null;
-      if (
-        match.priceKes !== null &&
-        match.priceKes !== undefined &&
-        String(match.priceKes).trim() !== ''
-      ) {
-        const parsed = Number(match.priceKes);
-        if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1000000) {
-          priceKes = existing.priceKes;
-        } else {
-          priceKes = Math.round(parsed);
-        }
-      }
-
-      return {
-        ...existing,
-        priceKes,
-        note: sanitizeText(match.note, 180) || existing.note,
-      };
-    });
-
-    store.pricing = updatedPricing;
-    writeStore(store);
-    res.json({ pricing: store.pricing });
-  });
-
-  app.put('/api/owner/config', requireOwnerAuth, (req, res) => {
-    const body = (req.body?.config || {}) as Partial<SiteConfig>;
-    const store = readStore();
-
-    const rawWhatsapp = sanitizeText(body.whatsappNumber, 25).replace(/[^\d]/g, '');
-    const updatedConfig: SiteConfig = {
-      ...store.config,
-      businessName: sanitizeText(body.businessName, 80) || store.config.businessName,
-      logoText: sanitizeText(body.logoText, 80) || store.config.logoText,
-      tagline: sanitizeText(body.tagline, 140) || store.config.tagline,
-      founderName: sanitizeText(body.founderName, 100) || store.config.founderName,
-      founderBio: sanitizeText(body.founderBio, 600) || store.config.founderBio,
-      city: sanitizeText(body.city, 120) || store.config.city,
-      whatsappNumber: rawWhatsapp,
-      telephone: sanitizeText(body.telephone, 40),
-      email: sanitizeText(body.email, 120),
-      serviceAreas: sanitizeText(body.serviceAreas, 400) || store.config.serviceAreas,
-      productsPolicyNote:
-        sanitizeText(body.productsPolicyNote, 400) || store.config.productsPolicyNote,
-      socialLinks: {
-        instagram: sanitizeOptionalUrl(body.socialLinks?.instagram),
-        facebook: sanitizeOptionalUrl(body.socialLinks?.facebook),
-        tiktok: sanitizeOptionalUrl(body.socialLinks?.tiktok),
-        x: sanitizeOptionalUrl(body.socialLinks?.x),
-      },
-    };
-
-    store.config = updatedConfig;
-    writeStore(store);
-    res.json({ config: store.config });
-  });
-
-  app.put('/api/owner/services', requireOwnerAuth, (req, res) => {
-    const incoming = req.body?.services;
-    if (!Array.isArray(incoming)) {
-      res.status(400).json({ error: 'Invalid services payload.' });
-      return;
-    }
-
-    const store = readStore();
-    const updatedServices: ServiceItem[] = store.services.map((existing) => {
-      const match = incoming.find((item: unknown) => (item as ServiceItem)?.id === existing.id) as
-        | Partial<ServiceItem>
-        | undefined;
-      if (!match) return existing;
-
-      return {
-        ...existing,
-        title: sanitizeText(match.title, 90) || existing.title,
-        description: sanitizeText(match.description, 320) || existing.description,
-      };
-    });
-
-    store.services = updatedServices;
-    writeStore(store);
-    res.json({ services: store.services });
+  app.all('/api/owner*', (_req, res) => {
+    res.status(403).json({ error: 'Access denied.' });
   });
 
   app.all('/api/*', (_req, res) => {

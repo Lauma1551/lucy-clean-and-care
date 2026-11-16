@@ -1,12 +1,16 @@
 import { MessageCircle } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { AboutSection } from './components/AboutSection.tsx';
 import { BookingSection } from './components/BookingSection.tsx';
 import { ContactFooter } from './components/ContactFooter.tsx';
 import { Header } from './components/Header.tsx';
 import { Hero } from './components/Hero.tsx';
-import { OwnerPortalModal } from './components/OwnerPortalModal.tsx';
+import { PrivacyPolicyPage, TermsOfUsePage } from './components/LegalPages.tsx';
 import { PricingSection } from './components/PricingSection.tsx';
+
+const OwnerPortalModal = lazy(() =>
+  import('./components/OwnerPortalModal.tsx').then((m) => ({ default: m.OwnerPortalModal }))
+);
 import { ServicesSection } from './components/ServicesSection.tsx';
 import { TeamSection } from './components/TeamSection.tsx';
 import { WhatsAppFallbackModal } from './components/WhatsAppFallbackModal.tsx';
@@ -23,9 +27,15 @@ import {
 import type { PricingCategory, ServiceItem, SiteConfig } from './shared/types.ts';
 import { buildWhatsAppUrl } from './utils/whatsapp.ts';
 
-type OwnerTab = 'bookings' | 'pricing' | 'contact' | 'services';
+function normalizePath(rawPath: string): string {
+  const cleaned = rawPath.replace(/\/+$/, '');
+  return cleaned === '' ? '/' : cleaned;
+}
 
 export default function App() {
+  const [pathname, setPathname] = useState<string>(() =>
+    typeof window !== 'undefined' ? normalizePath(window.location.pathname) : '/'
+  );
   const [config, setConfig] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [services, setServices] = useState<ServiceItem[]>(DEFAULT_SERVICES);
   const [pricing, setPricing] = useState<PricingCategory[]>(DEFAULT_PRICING);
@@ -34,8 +44,30 @@ export default function App() {
   const [selectedCleaningType, setSelectedCleaningType] = useState<string>(CLEANING_TYPES[0]);
 
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
-  const [ownerModalOpen, setOwnerModalOpen] = useState(false);
-  const [ownerTab, setOwnerTab] = useState<OwnerTab>('bookings');
+
+  const isPrivacyRoute = pathname === '/privacy-policy';
+  const isTermsRoute = pathname === '/terms-of-use';
+  const isOwnerRoute = pathname === '/owner' || pathname === '/owner-portal';
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setPathname(normalizePath(window.location.pathname));
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  useEffect(() => {
+    if (isPrivacyRoute) {
+      document.title = `Privacy Policy | ${config.businessName}`;
+    } else if (isTermsRoute) {
+      document.title = `Terms of Use | ${config.businessName}`;
+    } else if (isOwnerRoute) {
+      document.title = `Owner Access | ${config.businessName}`;
+    } else {
+      document.title = `${config.businessName} | ${config.tagline}`;
+    }
+  }, [isPrivacyRoute, isTermsRoute, isOwnerRoute, config.businessName, config.tagline]);
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
@@ -58,12 +90,45 @@ export default function App() {
     };
   }, []);
 
-  const scrollToBooking = useCallback(() => {
-    const el = document.getElementById('booking');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const navigate = useCallback((toPath: string) => {
+    const normalized = normalizePath(toPath);
+    if (normalizePath(window.location.pathname) !== normalized) {
+      window.history.pushState({}, '', normalized);
     }
+    setPathname(normalized);
+    window.scrollTo({ top: 0, behavior: 'auto' });
   }, []);
+
+  const navigateHomeSection = useCallback(
+    (sectionId?: string) => {
+      const targetUrl = sectionId ? `/#${sectionId}` : '/';
+      if (pathname !== '/') {
+        window.history.pushState({}, '', targetUrl);
+        setPathname('/');
+        window.requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            if (sectionId) {
+              document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }, 60);
+        });
+        return;
+      }
+
+      if (sectionId) {
+        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    },
+    [pathname]
+  );
+
+  const scrollToBooking = useCallback(() => {
+    navigateHomeSection('booking');
+  }, [navigateHomeSection]);
 
   const handleRequestQuote = useCallback(
     (houseType: string, cleaningType?: string) => {
@@ -97,11 +162,6 @@ export default function App() {
     [config.whatsappNumber, config.businessName, config.city]
   );
 
-  const handleOpenOwnerPortal = useCallback((initialTab: OwnerTab = 'bookings') => {
-    setOwnerTab(initialTab);
-    setOwnerModalOpen(true);
-  }, []);
-
   const handleOwnerDataUpdated = useCallback(
     (next: { config?: SiteConfig; pricing?: PricingCategory[]; services?: ServiceItem[] }) => {
       if (next.config) setConfig(next.config);
@@ -111,49 +171,92 @@ export default function App() {
     []
   );
 
+  if (isOwnerRoute) {
+    return (
+      <div className="min-h-screen bg-[#FAF8F4] text-[#222523]">
+        <Suspense
+          fallback={
+            <div className="min-h-screen flex items-center justify-center text-sm text-[#525753]">
+              Verifying access...
+            </div>
+          }
+        >
+          <OwnerPortalModal
+            isOpen={true}
+            initialTab="bookings"
+            onClose={() => navigate('/')}
+            config={config}
+            pricing={pricing}
+            services={services}
+            onDataUpdated={handleOwnerDataUpdated}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#FAF8F4] text-[#222523] flex flex-col">
+    <div id="top" className="min-h-screen bg-[#FAF8F4] text-[#222523] flex flex-col">
       <Header
         logoText={config.logoText}
         businessName={config.businessName}
         onBookClick={scrollToBooking}
+        onNavigateHomeSection={navigateHomeSection}
       />
 
       <main className="flex-1">
-        <Hero
-          config={config}
-          onBookClick={scrollToBooking}
-          onWhatsAppClick={() => handleOpenWhatsApp()}
-        />
-        <AboutSection config={config} />
-        <ServicesSection
-          config={config}
-          services={services}
-          onRequestQuote={handleRequestQuote}
-        />
-        <PricingSection
-          config={config}
-          pricing={pricing}
-          onRequestQuote={(houseType) => handleRequestQuote(houseType)}
-          onOpenOwnerPricing={() => handleOpenOwnerPortal('pricing')}
-        />
-        <WhyChooseSection config={config} />
-        <TeamSection
-          config={config}
-          onBookClick={scrollToBooking}
-          onWhatsAppInquiry={(msg) => handleOpenWhatsApp(msg)}
-        />
-        <BookingSection
-          config={config}
-          selectedHouseType={selectedHouseType}
-          selectedCleaningType={selectedCleaningType}
-          pricing={pricing}
-          onContinueOnWhatsApp={(msg) => handleOpenWhatsApp(msg)}
-        />
+        {isPrivacyRoute ? (
+          <PrivacyPolicyPage
+            config={config}
+            onBackHome={() => navigate('/')}
+            onNavigate={navigate}
+            onWhatsAppClick={() => handleOpenWhatsApp()}
+          />
+        ) : isTermsRoute ? (
+          <TermsOfUsePage
+            config={config}
+            onBackHome={() => navigate('/')}
+            onNavigate={navigate}
+            onWhatsAppClick={() => handleOpenWhatsApp()}
+          />
+        ) : (
+          <>
+            <Hero
+              config={config}
+              onBookClick={scrollToBooking}
+              onWhatsAppClick={() => handleOpenWhatsApp()}
+            />
+            <AboutSection config={config} />
+            <ServicesSection
+              config={config}
+              services={services}
+              onRequestQuote={handleRequestQuote}
+            />
+            <PricingSection
+              config={config}
+              pricing={pricing}
+              onRequestQuote={(houseType) => handleRequestQuote(houseType)}
+            />
+            <WhyChooseSection config={config} />
+            <TeamSection
+              config={config}
+              onBookClick={scrollToBooking}
+              onWhatsAppInquiry={(msg) => handleOpenWhatsApp(msg)}
+            />
+            <BookingSection
+              config={config}
+              selectedHouseType={selectedHouseType}
+              selectedCleaningType={selectedCleaningType}
+              pricing={pricing}
+              onContinueOnWhatsApp={(msg) => handleOpenWhatsApp(msg)}
+            />
+          </>
+        )}
         <ContactFooter
           config={config}
           onWhatsAppClick={() => handleOpenWhatsApp()}
-          onOpenOwnerPortal={handleOpenOwnerPortal}
+          onNavigate={navigate}
+          onNavigateHomeSection={navigateHomeSection}
         />
       </main>
 
@@ -173,17 +276,6 @@ export default function App() {
         isOpen={whatsAppModalOpen}
         onClose={() => setWhatsAppModalOpen(false)}
         onGoToBooking={scrollToBooking}
-        onOpenOwnerContact={() => handleOpenOwnerPortal('contact')}
-      />
-
-      <OwnerPortalModal
-        isOpen={ownerModalOpen}
-        initialTab={ownerTab}
-        onClose={() => setOwnerModalOpen(false)}
-        config={config}
-        pricing={pricing}
-        services={services}
-        onDataUpdated={handleOwnerDataUpdated}
       />
     </div>
   );

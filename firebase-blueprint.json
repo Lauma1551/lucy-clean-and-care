@@ -7,10 +7,10 @@
       "properties": {
         "referenceCode": {
           "type": "string",
-          "minLength": 8,
-          "maxLength": 24,
-          "pattern": "^LCC-[0-9]{4}-[A-Z0-9]{4,8}$",
-          "description": "Unique booking reference code shown to customer and owner."
+          "minLength": 10,
+          "maxLength": 16,
+          "pattern": "^LCC-[A-Z0-9]{6}$",
+          "description": "Unique booking reference code in LCC-XXXXXX format shown to customer and owner."
         },
         "fullName": {
           "type": "string",
@@ -87,6 +87,14 @@
           "enum": ["pending", "confirmed", "completed", "cancelled"],
           "description": "Current booking lifecycle status."
         },
+        "whatsappConsent": {
+          "type": "boolean",
+          "description": "Whether the customer explicitly consented to receive WhatsApp booking notifications."
+        },
+        "sentNotificationKeys": {
+          "type": "array",
+          "description": "Deduplication keys for WhatsApp notifications already processed for this booking."
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time",
@@ -110,6 +118,74 @@
         "preferredTime",
         "productPreference",
         "instructions",
+        "whatsappConsent",
+        "sentNotificationKeys",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "BookingChangeRequest": {
+      "title": "BookingChangeRequest",
+      "description": "Customer request to reschedule or cancel an existing booking referenced by LCC-XXXXXX.",
+      "type": "object",
+      "properties": {
+        "referenceCode": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 16,
+          "pattern": "^LCC-[A-Z0-9]{6}$",
+          "description": "Booking reference code in LCC-XXXXXX format."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 30,
+          "description": "Customer phone number for verification."
+        },
+        "requestType": {
+          "type": "string",
+          "enum": ["reschedule", "cancel"],
+          "description": "Whether the customer is requesting a reschedule or cancellation."
+        },
+        "requestedDate": {
+          "type": "string",
+          "maxLength": 10,
+          "description": "Requested new date in YYYY-MM-DD format when rescheduling."
+        },
+        "requestedTime": {
+          "type": "string",
+          "maxLength": 60,
+          "description": "Requested new time window when rescheduling."
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Optional reason or note from the customer."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "reviewed", "completed"],
+          "description": "Owner review status for the change request."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned last updated timestamp."
+        }
+      },
+      "required": [
+        "referenceCode",
+        "phoneNumber",
+        "requestType",
+        "requestedDate",
+        "requestedTime",
+        "reason",
         "status",
         "createdAt",
         "updatedAt"
@@ -380,6 +456,10 @@
       "schema": { "$ref": "#/entities/Booking" },
       "description": "Customer cleaning booking requests (public create-only, owner read/update/delete)."
     },
+    "/bookingChangeRequests/{requestId}": {
+      "schema": { "$ref": "#/entities/BookingChangeRequest" },
+      "description": "Customer rescheduling or cancellation requests (public create-only, owner read/update/delete)."
+    },
     "/services/{serviceId}": {
       "schema": { "$ref": "#/entities/Service" },
       "description": "Public cleaning services catalogue (public read, owner write)."
@@ -394,7 +474,7 @@
     },
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
-      "description": "Authorised owner UID records; readable only by the matching signed-in user or existing owner, never writable from client."
+      "description": "Locked collection (all client reads and writes denied). Owner authorization is restricted strictly to verified aumalucy015@gmail.com."
     }
   }
 }
