@@ -23,7 +23,7 @@ export function ServicesSection({
               Our Cleaning Services
             </p>
             <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance]">
-              Tailored care for homes in Roysambu and nearby estates.
+              Tailored care for homes in {config.serviceAreas.toLowerCase()}.
             </h2>
           </div>
           <p className="text-sm sm:text-base text-[#525753] max-w-md leading-relaxed">
@@ -34,53 +34,58 @@ export function ServicesSection({
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {services.map((service, index) => {
-            const orderLabel = String(index + 1).padStart(2, '0');
-            return (
-              <motion.article
-                key={service.id}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, amount: 0.1 }}
-                transition={{
-                  duration: 0.35,
-                  delay: Math.min(index * 0.04, 0.2),
-                  ease: [0.16, 1, 0.3, 1],
-                }}
-                className="group flex flex-col bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] overflow-hidden shadow-[0_10px_28px_-16px_rgba(27,67,50,0.14)] transition-all duration-200 hover:border-[#1B4332]/45 hover:shadow-[0_18px_36px_-14px_rgba(27,67,50,0.2)]"
-              >
-                <div className="aspect-[4/3] w-full overflow-hidden bg-[#EFE9DC] border-b border-[#DDD4C3]">
-                  <ResilientImage
-                    src={service.imageUrl}
-                    alt={`${service.title} residential cleaning service`}
-                    fallbackTitle={service.title}
-                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                  />
-                </div>
+          {services
+            .filter((service) => service.available !== false)
+            .map((service, index) => {
+              const orderLabel = String(index + 1).padStart(2, '0');
+              return (
+                <motion.article
+                  key={service.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true, amount: 0.1 }}
+                  transition={{
+                    duration: 0.35,
+                    delay: Math.min(index * 0.04, 0.2),
+                    ease: [0.16, 1, 0.3, 1],
+                  }}
+                  className="group flex flex-col bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] overflow-hidden shadow-[0_10px_28px_-16px_rgba(27,67,50,0.14)] transition-all duration-200 hover:border-[#1B4332]/45 hover:shadow-[0_18px_36px_-14px_rgba(27,67,50,0.2)]"
+                >
+                  <div className="aspect-[4/3] w-full overflow-hidden bg-[#EFE9DC] border-b border-[#DDD4C3]">
+                    <ResilientImage
+                      src={service.imageUrl}
+                      alt={`${service.title} residential cleaning service`}
+                      fallbackTitle={service.title}
+                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    />
+                  </div>
 
-                <div className="p-5 flex-1 flex flex-col">
-                  <p className="text-xs font-medium text-[#4F6F58] tabular-nums mb-1.5">
-                    {orderLabel} <span aria-hidden="true">/</span> Residential Care
-                  </p>
-                  <h3 className="font-display text-lg font-medium text-[#222523] leading-snug mb-2.5">
-                    {service.title}
-                  </h3>
-                  <p className="text-sm text-[#525753] leading-relaxed mb-5 flex-1">
-                    {service.description}
-                  </p>
+                  <div className="p-5 flex-1 flex flex-col">
+                    <p className="text-xs font-medium text-[#4F6F58] tabular-nums mb-1.5">
+                      {orderLabel} <span aria-hidden="true">/</span> Residential Care
+                    </p>
+                    <h3 className="font-display text-lg font-medium text-[#222523] leading-snug mb-2.5">
+                      {service.title}
+                    </h3>
+                    <p className="text-sm text-[#525753] leading-relaxed mb-4 flex-1">
+                      {service.description}
+                    </p>
+                    {service.pricingNote && (
+                      <p className="text-xs text-[#4F6F58] mb-4">{service.pricingNote}</p>
+                    )}
 
-                  <button
-                    type="button"
-                    onClick={() => onRequestQuote(service.houseTypeValue, service.cleaningTypeValue)}
-                    className="inline-flex items-center justify-between w-full px-4 py-2.5 min-h-[44px] text-sm font-medium text-[#1B4332] bg-[#F4EFE6] hover:bg-[#1B4332] hover:text-white rounded-xl border border-[#DDD4C3] hover:border-[#1B4332] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332]"
-                  >
-                    <span>Request a Quote</span>
-                    <ArrowUpRight className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  </button>
-                </div>
-              </motion.article>
-            );
-          })}
+                    <button
+                      type="button"
+                      onClick={() => onRequestQuote(service.houseTypeValue, service.cleaningTypeValue)}
+                      className="inline-flex items-center justify-between w-full px-4 py-2.5 min-h-[44px] text-sm font-medium text-[#1B4332] bg-[#F4EFE6] hover:bg-[#1B4332] hover:text-white rounded-xl border border-[#DDD4C3] hover:border-[#1B4332] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332]"
+                    >
+                      <span>Request a Quote</span>
+                      <ArrowUpRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+                    </button>
+                  </div>
+                </motion.article>
+              );
+            })}
         </div>
 
         {/* Cleaning Products Policy */}

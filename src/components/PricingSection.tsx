@@ -105,6 +105,16 @@ export function PricingSection({
           Final quotes are confirmed after reviewing your home size, current condition, cleaning
           type (standard, deep, kitchen/bathroom, or move-in/move-out), and whether{' '}
           {config.businessName} brings the cleaning products and equipment or you provide your own.
+          {pricing[0]?.updatedAt && (
+            <span className="block mt-1.5 text-xs text-[#4F6F58]">
+              Price list last updated:{' '}
+              {new Date(pricing[0].updatedAt).toLocaleDateString('en-KE', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+              })}
+            </span>
+          )}
         </p>
       </div>
     </section>

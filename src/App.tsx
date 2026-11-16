@@ -11,6 +11,8 @@ import { ServicesSection } from './components/ServicesSection.tsx';
 import { TeamSection } from './components/TeamSection.tsx';
 import { WhatsAppFallbackModal } from './components/WhatsAppFallbackModal.tsx';
 import { WhyChooseSection } from './components/WhyChooseSection.tsx';
+import { isFirebaseConfigured, verifyFirestoreConnection } from './lib/firebase.ts';
+import { fetchPublicSiteData } from './lib/firestoreService.ts';
 import {
   CLEANING_TYPES,
   DEFAULT_PRICING,
@@ -36,17 +38,24 @@ export default function App() {
   const [ownerTab, setOwnerTab] = useState<OwnerTab>('bookings');
 
   useEffect(() => {
-    fetch('/api/site')
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (!data) return;
-        if (data.config) setConfig(data.config as SiteConfig);
-        if (Array.isArray(data.services)) setServices(data.services as ServiceItem[]);
-        if (Array.isArray(data.pricing)) setPricing(data.pricing as PricingCategory[]);
+    if (!isFirebaseConfigured) return;
+
+    let cancelled = false;
+    verifyFirestoreConnection().catch(() => false);
+    fetchPublicSiteData()
+      .then((result) => {
+        if (cancelled) return;
+        setConfig(result.data.config);
+        setServices(result.data.services);
+        setPricing(result.data.pricing);
       })
-      .catch(() => {
-        // Fallback defaults already initialized in state
+      .catch((error) => {
+        console.error('Could not load site configuration from Firestore:', error);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const scrollToBooking = useCallback(() => {
@@ -71,7 +80,7 @@ export default function App() {
     (customMessage?: string) => {
       const message =
         customMessage ||
-        `Hello ${config.businessName}, I would like to enquire about residential home cleaning services in Roysambu, Nairobi.`;
+        `Hello ${config.businessName}, I would like to enquire about residential home cleaning services in ${config.city}.`;
       const url = buildWhatsAppUrl(config.whatsappNumber, message);
       if (!url) {
         setWhatsAppModalOpen(true);
@@ -85,13 +94,22 @@ export default function App() {
       link.click();
       document.body.removeChild(link);
     },
-    [config.whatsappNumber, config.businessName]
+    [config.whatsappNumber, config.businessName, config.city]
   );
 
   const handleOpenOwnerPortal = useCallback((initialTab: OwnerTab = 'bookings') => {
     setOwnerTab(initialTab);
     setOwnerModalOpen(true);
   }, []);
+
+  const handleOwnerDataUpdated = useCallback(
+    (next: { config?: SiteConfig; pricing?: PricingCategory[]; services?: ServiceItem[] }) => {
+      if (next.config) setConfig(next.config);
+      if (next.pricing) setPricing(next.pricing);
+      if (next.services) setServices(next.services);
+    },
+    []
+  );
 
   return (
     <div className="min-h-screen bg-[#FAF8F4] text-[#222523] flex flex-col">
@@ -165,11 +183,7 @@ export default function App() {
         config={config}
         pricing={pricing}
         services={services}
-        onDataUpdated={(next) => {
-          if (next.config) setConfig(next.config);
-          if (next.pricing) setPricing(next.pricing);
-          if (next.services) setServices(next.services);
-        }}
+        onDataUpdated={handleOwnerDataUpdated}
       />
     </div>
   );

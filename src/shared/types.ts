@@ -18,6 +18,7 @@ export interface SiteConfig {
   serviceAreas: string;
   productsPolicyNote: string;
   socialLinks: SocialLinks;
+  updatedAt?: string;
 }
 
 export interface ServiceItem {
@@ -28,14 +29,19 @@ export interface ServiceItem {
   cleaningTypeValue: string;
   description: string;
   imageUrl: string;
+  available: boolean;
+  pricingNote: string;
+  updatedAt?: string;
 }
 
 export interface PricingCategory {
   id: string;
+  order: number;
   label: string;
   houseTypeValue: string;
   priceKes: number | null;
   note: string;
+  updatedAt?: string;
 }
 
 export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
@@ -43,6 +49,7 @@ export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
 export interface BookingRequestPayload {
   fullName: string;
   phoneNumber: string;
+  email: string;
   locationEstate: string;
   houseType: string;
   preferredDate: string;
@@ -57,6 +64,7 @@ export interface BookingRecord extends BookingRequestPayload {
   referenceCode: string;
   status: BookingStatus;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface PublicSiteData {

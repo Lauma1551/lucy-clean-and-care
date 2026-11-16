@@ -66,23 +66,13 @@ export function TeamSection({ config, onBookClick, onWhatsAppInquiry }: TeamSect
               </div>
 
               <div className="space-y-4 text-base text-[#3B3F3C] leading-relaxed">
-                <p>Hello, I&apos;m Lucy, the founder of {config.businessName}.</p>
-                <p>
-                  I started this business with a simple vision: to make homes cleaner, fresher and
-                  more comfortable through reliable and thoughtful cleaning services.
-                </p>
-                <p>
-                  I believe every home deserves care and attention, whether it&apos;s a bedsitter,
-                  a family apartment or a larger residential space.
-                </p>
-                <p>
-                  My goal is to build a cleaning service that customers can trust, one home and one
-                  satisfied customer at a time.
-                </p>
-                <p>
-                  Thank you for considering {config.businessName}. I look forward to making your
-                  home a little brighter.
-                </p>
+                {config.founderBio
+                  .split(/\n\s*\n/)
+                  .map((paragraph) => paragraph.trim())
+                  .filter(Boolean)
+                  .map((paragraph, idx) => (
+                    <p key={idx}>{paragraph}</p>
+                  ))}
               </div>
 
               <div className="mt-8 pt-6 border-t border-[#DDD4C3] flex flex-wrap items-center gap-4">

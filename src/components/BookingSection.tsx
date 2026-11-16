@@ -2,6 +2,15 @@ import { CheckCircle2, Loader2, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useEffect, useState, type FormEvent } from 'react';
 import {
+  activeFirebaseError,
+  isFirebaseConfigured,
+} from '../lib/firebase.ts';
+import {
+  extractReadableError,
+  submitCustomerBooking,
+  validateBookingPayload,
+} from '../lib/firestoreService.ts';
+import {
   CLEANING_TYPES,
   HOUSE_TYPES,
   PREFERRED_TIMES,
@@ -41,6 +50,7 @@ export function BookingSection({
   const [form, setForm] = useState<BookingRequestPayload>({
     fullName: '',
     phoneNumber: '',
+    email: '',
     locationEstate: '',
     houseType: selectedHouseType || HOUSE_TYPES[0],
     preferredDate: getTodayDateString(),
@@ -65,67 +75,35 @@ export function BookingSection({
 
   const matchingTier = pricing.find((tier) => tier.houseTypeValue === form.houseType);
 
-  const validateClient = (): Record<string, string> => {
-    const errors: Record<string, string> = {};
-    if (form.fullName.trim().length < 2) {
-      errors.fullName = 'Please enter your full name.';
-    }
-    const digits = form.phoneNumber.replace(/[^\d]/g, '');
-    if (digits.length < 9 || digits.length > 15) {
-      errors.phoneNumber = 'Please enter a valid phone number (e.g. 07XX XXX XXX).';
-    }
-    if (form.locationEstate.trim().length < 2) {
-      errors.locationEstate = 'Please enter your estate or area (e.g. Roysambu).';
-    }
-    if (!form.houseType) {
-      errors.houseType = 'Please select your house size.';
-    }
-    if (!form.preferredDate) {
-      errors.preferredDate = 'Please select a preferred cleaning date.';
-    }
-    if (!form.preferredTime) {
-      errors.preferredTime = 'Please select a preferred time.';
-    }
-    if (!form.cleaningType) {
-      errors.cleaningType = 'Please select the type of cleaning required.';
-    }
-    if (!form.productPreference) {
-      errors.productPreference = 'Please select your cleaning products preference.';
-    }
-    return errors;
-  };
-
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
-    const errors = validateClient();
+
+    const errors = validateBookingPayload(form);
     setFieldErrors(errors);
     if (Object.keys(errors).length > 0) {
       return;
     }
 
+    if (!isFirebaseConfigured) {
+      setSubmitError(
+        activeFirebaseError ||
+          'Online booking database is not configured yet. Please use WhatsApp below to book directly.'
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      const response = await fetch('/api/bookings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data?.fieldErrors && typeof data.fieldErrors === 'object') {
-          setFieldErrors(data.fieldErrors);
-        }
-        setSubmitError(data?.error || 'Could not submit your booking request. Please check the form.');
-        return;
-      }
-
-      setConfirmedBooking(data.booking as BookingRecord);
+      const savedBooking = await submitCustomerBooking(form);
+      setConfirmedBooking(savedBooking);
       setFieldErrors({});
-    } catch {
+    } catch (error) {
       setSubmitError(
-        'Unable to reach the booking server right now. Please try again or reach us via WhatsApp.'
+        extractReadableError(
+          error,
+          'Unable to save your booking request right now. Please try again or reach us via WhatsApp.'
+        )
       );
     } finally {
       setIsSubmitting(false);
@@ -138,6 +116,7 @@ export function BookingSection({
     setForm({
       fullName: '',
       phoneNumber: '',
+      email: '',
       locationEstate: '',
       houseType: selectedHouseType || HOUSE_TYPES[0],
       preferredDate: getTodayDateString(),
@@ -164,7 +143,7 @@ export function BookingSection({
               Book a Cleaning
             </p>
             <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] mb-4">
-              Request a home cleaning in Roysambu &amp; nearby estates.
+              Request a home cleaning in {config.serviceAreas.toLowerCase()}.
             </h2>
             <p className="text-base text-[#525753] leading-relaxed mb-8">
               Share your details, house size, preferred date, and cleaning product preference below.
@@ -242,6 +221,14 @@ export function BookingSection({
                       {confirmedBooking.phoneNumber}
                     </dd>
                   </div>
+                  {confirmedBooking.email && (
+                    <div className="sm:col-span-2">
+                      <dt className="text-[#525753]">Email Address</dt>
+                      <dd className="font-medium text-[#222523] mt-0.5">
+                        {confirmedBooking.email}
+                      </dd>
+                    </div>
+                  )}
                   <div>
                     <dt className="text-[#525753]">House &amp; Service</dt>
                     <dd className="font-medium text-[#222523] mt-0.5">
@@ -291,6 +278,16 @@ export function BookingSection({
                 noValidate
                 className="bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] p-6 sm:p-8 space-y-5 shadow-[0_14px_34px_-18px_rgba(27,67,50,0.14)]"
               >
+                {!isFirebaseConfigured && activeFirebaseError && (
+                  <div
+                    role="alert"
+                    className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-900"
+                  >
+                    {activeFirebaseError} You can still send your request directly via WhatsApp
+                    below.
+                  </div>
+                )}
+
                 {submitError && (
                   <div
                     role="alert"
@@ -346,26 +343,50 @@ export function BookingSection({
                   </div>
                 </div>
 
-                <div>
-                  <label
-                    htmlFor="booking-location"
-                    className="block text-sm font-medium text-[#222523] mb-1.5"
-                  >
-                    Location or Estate
-                  </label>
-                  <input
-                    id="booking-location"
-                    type="text"
-                    required
-                    value={form.locationEstate}
-                    onChange={(e) => setForm({ ...form, locationEstate: e.target.value })}
-                    placeholder="e.g. Roysambu or nearby estate in Nairobi"
-                    aria-invalid={Boolean(fieldErrors.locationEstate)}
-                    className="w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-[#DDD4C3] bg-white text-[#222523] placeholder:text-[#525753]/60 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] focus:border-[#1B4332]"
-                  />
-                  {fieldErrors.locationEstate && (
-                    <p className="mt-1 text-xs text-red-700">{fieldErrors.locationEstate}</p>
-                  )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                  <div>
+                    <label
+                      htmlFor="booking-location"
+                      className="block text-sm font-medium text-[#222523] mb-1.5"
+                    >
+                      Location or Estate
+                    </label>
+                    <input
+                      id="booking-location"
+                      type="text"
+                      required
+                      value={form.locationEstate}
+                      onChange={(e) => setForm({ ...form, locationEstate: e.target.value })}
+                      placeholder="e.g. Roysambu or nearby estate in Nairobi"
+                      aria-invalid={Boolean(fieldErrors.locationEstate)}
+                      className="w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-[#DDD4C3] bg-white text-[#222523] placeholder:text-[#525753]/60 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] focus:border-[#1B4332]"
+                    />
+                    {fieldErrors.locationEstate && (
+                      <p className="mt-1 text-xs text-red-700">{fieldErrors.locationEstate}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="booking-email"
+                      className="block text-sm font-medium text-[#222523] mb-1.5"
+                    >
+                      Email Address{' '}
+                      <span className="text-[#525753] font-normal">(Optional)</span>
+                    </label>
+                    <input
+                      id="booking-email"
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      placeholder="you@example.com"
+                      aria-invalid={Boolean(fieldErrors.email)}
+                      className="w-full px-3.5 py-2.5 min-h-[44px] rounded-xl border border-[#DDD4C3] bg-white text-[#222523] placeholder:text-[#525753]/60 text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4332] focus:border-[#1B4332]"
+                    />
+                    {fieldErrors.email && (
+                      <p className="mt-1 text-xs text-red-700">{fieldErrors.email}</p>
+                    )}
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">

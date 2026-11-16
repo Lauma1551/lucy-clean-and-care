@@ -24,13 +24,18 @@ export function buildBookingWhatsAppMessage(booking: BookingRecord, businessName
     `Reference: ${booking.referenceCode}`,
     `Name: ${booking.fullName}`,
     `Phone: ${booking.phoneNumber}`,
+  ];
+  if (booking.email?.trim()) {
+    lines.push(`Email: ${booking.email.trim()}`);
+  }
+  lines.push(
     `Location/Estate: ${booking.locationEstate}`,
     `House Size: ${booking.houseType}`,
     `Cleaning Type: ${booking.cleaningType}`,
     `Products Option: ${booking.productPreference}`,
     `Preferred Date: ${booking.preferredDate}`,
-    `Preferred Time: ${booking.preferredTime}`,
-  ];
+    `Preferred Time: ${booking.preferredTime}`
+  );
   if (booking.instructions.trim()) {
     lines.push(`Instructions: ${booking.instructions.trim()}`);
   }

@@ -251,6 +251,7 @@ async function startServer() {
 
     const fullName = sanitizeText(body.fullName, 120);
     const phoneNumber = sanitizeText(body.phoneNumber, 30);
+    const email = sanitizeText(body.email, 120);
     const locationEstate = sanitizeText(body.locationEstate, 160);
     const houseType = sanitizeText(body.houseType, 60);
     const preferredDate = sanitizeText(body.preferredDate, 20);
@@ -298,6 +299,7 @@ async function startServer() {
       referenceCode: generateReferenceCode(),
       fullName,
       phoneNumber,
+      email,
       locationEstate,
       houseType,
       preferredDate,

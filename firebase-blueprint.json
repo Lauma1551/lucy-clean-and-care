@@ -1,0 +1,400 @@
+{
+  "entities": {
+    "Booking": {
+      "title": "Booking",
+      "description": "Customer residential cleaning booking request submitted through the website.",
+      "type": "object",
+      "properties": {
+        "referenceCode": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 24,
+          "pattern": "^LCC-[0-9]{4}-[A-Z0-9]{4,8}$",
+          "description": "Unique booking reference code shown to customer and owner."
+        },
+        "fullName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Customer full name."
+        },
+        "phoneNumber": {
+          "type": "string",
+          "minLength": 9,
+          "maxLength": 30,
+          "description": "Customer phone or WhatsApp number."
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Optional customer email address."
+        },
+        "locationEstate": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160,
+          "description": "Customer estate or neighbourhood in Nairobi."
+        },
+        "houseType": {
+          "type": "string",
+          "enum": [
+            "Bedsitter",
+            "One Bedroom",
+            "Two Bedrooms",
+            "Three Bedrooms",
+            "Four Bedrooms and Above"
+          ],
+          "description": "Residential property size."
+        },
+        "cleaningType": {
+          "type": "string",
+          "enum": [
+            "Standard Home Cleaning",
+            "Deep Cleaning",
+            "Kitchen and Bathroom Cleaning",
+            "Move-In and Move-Out Cleaning"
+          ],
+          "description": "Type of cleaning service requested."
+        },
+        "preferredDate": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Preferred cleaning date in YYYY-MM-DD format."
+        },
+        "preferredTime": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 60,
+          "description": "Preferred cleaning time window."
+        },
+        "productPreference": {
+          "type": "string",
+          "enum": [
+            "Lucy Clean & Care brings cleaning products and equipment",
+            "Customer provides cleaning products"
+          ],
+          "description": "Whether Lucy Clean & Care supplies cleaning products or the customer provides them."
+        },
+        "instructions": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Optional special instructions or access notes."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "confirmed", "completed", "cancelled"],
+          "description": "Current booking lifecycle status."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned creation timestamp."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned last updated timestamp."
+        }
+      },
+      "required": [
+        "referenceCode",
+        "fullName",
+        "phoneNumber",
+        "email",
+        "locationEstate",
+        "houseType",
+        "cleaningType",
+        "preferredDate",
+        "preferredTime",
+        "productPreference",
+        "instructions",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Service": {
+      "title": "Service",
+      "description": "Cleaning service category displayed on the public website and managed by the owner.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Stable service document identifier."
+        },
+        "order": {
+          "type": "integer",
+          "description": "Display order index."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 90,
+          "description": "Service display name."
+        },
+        "houseTypeValue": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60,
+          "description": "Pre-selected house type when requesting a quote."
+        },
+        "cleaningTypeValue": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Pre-selected cleaning type when requesting a quote."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 320,
+          "description": "Public service description."
+        },
+        "imageUrl": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "Relative or absolute image path for the service card."
+        },
+        "available": {
+          "type": "boolean",
+          "description": "Whether the service is currently available for booking."
+        },
+        "pricingNote": {
+          "type": "string",
+          "maxLength": 180,
+          "description": "Optional pricing or quotation summary note for this service."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned last updated timestamp."
+        }
+      },
+      "required": [
+        "id",
+        "order",
+        "title",
+        "houseTypeValue",
+        "cleaningTypeValue",
+        "description",
+        "imageUrl",
+        "available",
+        "pricingNote",
+        "updatedAt"
+      ]
+    },
+    "PricingTier": {
+      "title": "PricingTier",
+      "description": "House-size pricing tier in Kenyan Shillings (KES) or Request a Quote.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_-]+$",
+          "description": "Stable pricing tier identifier."
+        },
+        "order": {
+          "type": "integer",
+          "description": "Display order index."
+        },
+        "label": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Cleaning category display label."
+        },
+        "houseTypeValue": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60,
+          "description": "Matching house type value for booking prefill."
+        },
+        "priceKes": {
+          "type": "number",
+          "description": "Price in KES or null when priced on quotation."
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 180,
+          "description": "Scope or quotation explanation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned last updated timestamp."
+        }
+      },
+      "required": ["id", "order", "label", "houseTypeValue", "note", "updatedAt"]
+    },
+    "SocialLinks": {
+      "title": "SocialLinks",
+      "description": "Social media profile URLs for Lucy Clean & Care.",
+      "type": "object",
+      "properties": {
+        "instagram": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Instagram profile URL."
+        },
+        "facebook": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "Facebook page URL."
+        },
+        "tiktok": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "TikTok profile URL."
+        },
+        "x": {
+          "type": "string",
+          "maxLength": 300,
+          "description": "X profile URL."
+        }
+      },
+      "required": ["instagram", "facebook", "tiktok", "x"]
+    },
+    "SiteConfig": {
+      "title": "SiteConfig",
+      "description": "Public website configuration, founder biography, contact details, and service areas.",
+      "type": "object",
+      "properties": {
+        "businessName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Official business name."
+        },
+        "logoText": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Brand wordmark text."
+        },
+        "tagline": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 140,
+          "description": "Business tagline."
+        },
+        "founderName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "description": "Founder full name."
+        },
+        "founderBio": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 1500,
+          "description": "Founder introduction biography displayed in Meet the Founder."
+        },
+        "city": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120,
+          "description": "Primary business city/neighbourhood."
+        },
+        "whatsappNumber": {
+          "type": "string",
+          "maxLength": 25,
+          "description": "WhatsApp number in international digits without +."
+        },
+        "telephone": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "Display telephone number."
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Public business email address."
+        },
+        "serviceAreas": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 400,
+          "description": "Estates and areas served."
+        },
+        "productsPolicyNote": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 400,
+          "description": "Explanation of cleaning supplies and pricing policy."
+        },
+        "socialLinks": {
+          "$ref": "#/entities/SocialLinks",
+          "description": "Social media links."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server-assigned last updated timestamp."
+        }
+      },
+      "required": [
+        "businessName",
+        "logoText",
+        "tagline",
+        "founderName",
+        "founderBio",
+        "city",
+        "whatsappNumber",
+        "telephone",
+        "email",
+        "serviceAreas",
+        "productsPolicyNote",
+        "socialLinks",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorised owner UID allowlist document managed via Firebase Console.",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Owner email address."
+        },
+        "role": {
+          "type": "string",
+          "enum": ["owner"],
+          "description": "Fixed owner role."
+        }
+      },
+      "required": ["email", "role"]
+    }
+  },
+  "firestore": {
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Customer cleaning booking requests (public create-only, owner read/update/delete)."
+    },
+    "/services/{serviceId}": {
+      "schema": { "$ref": "#/entities/Service" },
+      "description": "Public cleaning services catalogue (public read, owner write)."
+    },
+    "/pricing/{pricingId}": {
+      "schema": { "$ref": "#/entities/PricingTier" },
+      "description": "KES pricing and quotation tiers (public read, owner write)."
+    },
+    "/siteConfig/{configId}": {
+      "schema": { "$ref": "#/entities/SiteConfig" },
+      "description": "Website configuration including founder biography, contact details, and service areas (public read, owner write)."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Authorised owner UID records; readable only by the matching signed-in user or existing owner, never writable from client."
+    }
+  }
+}
