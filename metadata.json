@@ -1,0 +1,6 @@
+{
+  "name": "Lucy Clean & Care",
+  "description": "Residential and domestic cleaning services in Roysambu, Nairobi, Kenya. A cleaner home, a happier you.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

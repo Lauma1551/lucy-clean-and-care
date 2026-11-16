@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <rect width="64" height="64" rx="14" fill="#F4EFE6" />
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" stroke="#DDD4C3" stroke-width="2" />
+  <!-- Pitched roof & chimney -->
+  <path
+    d="M11 30L27 15L43 30"
+    stroke="#1B4332"
+    stroke-width="4.2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path d="M35 16V22" stroke="#1B4332" stroke-width="3.8" stroke-linecap="square" />
+  <!-- Right house wall -->
+  <path d="M38 26.5V43.5" stroke="#1B4332" stroke-width="3.6" stroke-linecap="round" />
+  <!-- Four-pane window -->
+  <rect x="20.5" y="29" width="5" height="5" rx="0.6" fill="#1B4332" />
+  <rect x="27.5" y="29" width="5" height="5" rx="0.6" fill="#1B4332" />
+  <rect x="20.5" y="36" width="5" height="5" rx="0.6" fill="#1B4332" />
+  <rect x="27.5" y="36" width="5" height="5" rx="0.6" fill="#1B4332" />
+  <!-- Leaf -->
+  <path
+    d="M41.5 43.5C41.5 34.5 47 28 55 26.5C54 35.5 49 42.5 41.5 43.5Z"
+    fill="#4F8246"
+  />
+  <path
+    d="M42 43C45.5 38.5 49 34.5 53 31"
+    stroke="#F4EFE6"
+    stroke-width="1.6"
+    stroke-linecap="round"
+  />
+  <!-- Ground arc -->
+  <path
+    d="M16 46.5C24 43 32 43 40 44"
+    stroke="#4F8246"
+    stroke-width="2.6"
+    stroke-linecap="round"
+  />
+  <!-- Sparkles -->
+  <path
+    d="M46 11L47.3 15.2L51.5 16.5L47.3 17.8L46 22L44.7 17.8L40.5 16.5L44.7 15.2L46 11Z"
+    fill="#4F8246"
+  />
+  <path
+    d="M53.5 18L54.2 20.3L56.5 21L54.2 21.7L53.5 24L52.8 21.7L50.5 21L52.8 20.3L53.5 18Z"
+    fill="#4F8246"
+  />
+</svg>
