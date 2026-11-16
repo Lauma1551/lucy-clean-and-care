@@ -50,7 +50,38 @@ import type {
 import { buildWhatsAppUrl, formatKesPrice } from '../utils/whatsapp.ts';
 
 type OwnerTab = 'bookings' | 'pricing' | 'contact' | 'services';
-type BookingFilter = 'all' | 'history' | BookingStatus;
+type BookingFilter = 'all' | BookingStatus;
+
+const BOOKING_STATUS_META: Record<
+  BookingStatus,
+  { label: string; badgeClass: string; description: string }
+> = {
+  pending: {
+    label: 'Pending',
+    badgeClass: 'bg-amber-100 text-amber-900 border-amber-200',
+    description: 'New requests waiting for your approval',
+  },
+  confirmed: {
+    label: 'Confirmed',
+    badgeClass: 'bg-[#DCE6DD] text-[#1B4332] border-[#1B4332]/25',
+    description: 'Bookings you have accepted',
+  },
+  completed: {
+    label: 'Completed',
+    badgeClass: 'bg-emerald-100 text-emerald-900 border-emerald-200',
+    description: 'Cleaning appointments you have finished',
+  },
+  cancelled: {
+    label: 'Cancelled',
+    badgeClass: 'bg-stone-200 text-stone-800 border-stone-300',
+    description: 'Appointments that have been cancelled',
+  },
+  rejected: {
+    label: 'Rejected',
+    badgeClass: 'bg-red-100 text-red-900 border-red-200',
+    description: 'Requests you have declined',
+  },
+};
 
 interface OwnerPortalModalProps {
   isOpen: boolean;
@@ -88,6 +119,8 @@ export function OwnerPortalModal({
   const [bookingFilter, setBookingFilter] = useState<BookingFilter>('all');
   const [bookingSearch, setBookingSearch] = useState('');
   const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [updatingBookingId, setUpdatingBookingId] = useState<string | null>(null);
+  const [expandedBookingId, setExpandedBookingId] = useState<string | null>(null);
   const [pendingDeleteBookingId, setPendingDeleteBookingId] = useState<string | null>(null);
   const [reschedulingBookingId, setReschedulingBookingId] = useState<string | null>(null);
   const [rescheduleDate, setRescheduleDate] = useState('');
@@ -237,27 +270,34 @@ export function OwnerPortalModal({
     loadBookings();
   }, [isOpen, isAuthorizedOwner, currentUser, loadBookings]);
 
-  const pendingCount = useMemo(
-    () => bookings.filter((b) => b.status === 'pending').length,
+  const statusCounts = useMemo(
+    () => ({
+      all: bookings.length,
+      pending: bookings.filter((b) => b.status === 'pending').length,
+      confirmed: bookings.filter((b) => b.status === 'confirmed').length,
+      completed: bookings.filter((b) => b.status === 'completed').length,
+      cancelled: bookings.filter((b) => b.status === 'cancelled').length,
+      rejected: bookings.filter((b) => b.status === 'rejected').length,
+    }),
     [bookings]
   );
+
+  const pendingCount = statusCounts.pending;
 
   const filteredBookings = useMemo(() => {
     const queryText = bookingSearch.trim().toLowerCase();
     return bookings.filter((b) => {
       const matchesFilter =
-        bookingFilter === 'all'
-          ? true
-          : bookingFilter === 'history'
-            ? b.status === 'completed' || b.status === 'cancelled'
-            : b.status === bookingFilter;
+        bookingFilter === 'all' ? true : b.status === bookingFilter;
       if (!matchesFilter) return false;
       if (!queryText) return true;
       return (
         b.referenceCode.toLowerCase().includes(queryText) ||
         b.fullName.toLowerCase().includes(queryText) ||
         b.phoneNumber.toLowerCase().includes(queryText) ||
+        b.email.toLowerCase().includes(queryText) ||
         b.locationEstate.toLowerCase().includes(queryText) ||
+        b.houseType.toLowerCase().includes(queryText) ||
         b.cleaningType.toLowerCase().includes(queryText)
       );
     });
@@ -342,75 +382,98 @@ export function OwnerPortalModal({
       return { note: 'Customer did not opt in to WhatsApp updates (not sent).' };
     }
 
-    const res = await triggerWhatsAppNotification(
-      {
-        event,
-        idempotencyKey: dedupeKey,
-        referenceCode: booking.referenceCode,
-        customerName: booking.fullName,
-        customerPhone: booking.phoneNumber,
-        locationEstate: booking.locationEstate,
-        houseType: booking.houseType,
-        cleaningType: booking.cleaningType,
-        preferredDate: dateValue,
-        preferredTime: timeValue,
-        whatsappConsent: booking.whatsappConsent,
-      },
-      { requireOwnerAuth: true }
-    );
+    try {
+      const res = await triggerWhatsAppNotification(
+        {
+          event,
+          idempotencyKey: dedupeKey,
+          referenceCode: booking.referenceCode,
+          customerName: booking.fullName,
+          customerPhone: booking.phoneNumber,
+          locationEstate: booking.locationEstate,
+          houseType: booking.houseType,
+          cleaningType: booking.cleaningType,
+          preferredDate: dateValue,
+          preferredTime: timeValue,
+          whatsappConsent: booking.whatsappConsent,
+        },
+        { requireOwnerAuth: true }
+      );
 
-    if (res.sent || res.status === 'deduplicated') {
+      if (res.sent || res.status === 'deduplicated') {
+        return {
+          sentKey: dedupeKey,
+          note: res.sent
+            ? 'Customer notified via WhatsApp.'
+            : 'Duplicate customer WhatsApp notification skipped.',
+        };
+      }
+
+      return { note: `WhatsApp notice: ${res.message}` };
+    } catch {
       return {
-        sentKey: dedupeKey,
-        note: res.sent
-          ? 'Customer notified via WhatsApp.'
-          : 'Duplicate customer WhatsApp notification skipped.',
+        note: 'WhatsApp notification could not be sent right now, but your booking update is saved.',
       };
     }
-
-    return { note: `WhatsApp notice: ${res.message}` };
   };
 
   const handleUpdateBookingStatus = async (booking: BookingRecord, status: BookingStatus) => {
+    if (booking.status === status) return;
     setSaveError(null);
     setSaveMessage(null);
+    setUpdatingBookingId(booking.id);
     try {
-      let sentKey: string | undefined;
-      let notifyNote = '';
+      // Save booking status permanently to Firestore FIRST so notification failures never block management
+      let updated = await updateOwnerBookingDetails(booking, { status });
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? updated : b)));
 
+      let notifyNote = '';
       if (status === 'confirmed' && booking.status !== 'confirmed') {
         const notifyResult = await sendCustomerNotificationIfEligible(
-          booking,
+          updated,
           'customer_confirmed',
-          booking.preferredDate,
-          booking.preferredTime
+          updated.preferredDate,
+          updated.preferredTime
         );
-        sentKey = notifyResult.sentKey;
         notifyNote = notifyResult.note;
+        if (notifyResult.sentKey) {
+          const withKey = await updateOwnerBookingDetails(updated, {
+            appendNotificationKey: notifyResult.sentKey,
+          }).catch(() => null);
+          if (withKey) {
+            updated = withKey;
+            setBookings((prev) => prev.map((b) => (b.id === booking.id ? withKey : b)));
+          }
+        }
       } else if (status === 'cancelled' && booking.status === 'confirmed') {
         const notifyResult = await sendCustomerNotificationIfEligible(
-          booking,
+          updated,
           'customer_cancelled',
-          booking.preferredDate,
-          booking.preferredTime
+          updated.preferredDate,
+          updated.preferredTime
         );
-        sentKey = notifyResult.sentKey;
         notifyNote = notifyResult.note;
+        if (notifyResult.sentKey) {
+          const withKey = await updateOwnerBookingDetails(updated, {
+            appendNotificationKey: notifyResult.sentKey,
+          }).catch(() => null);
+          if (withKey) {
+            updated = withKey;
+            setBookings((prev) => prev.map((b) => (b.id === booking.id ? withKey : b)));
+          }
+        }
       }
 
-      const updated = await updateOwnerBookingDetails(booking, {
-        status,
-        appendNotificationKey: sentKey,
-      });
-
-      setBookings((prev) => prev.map((b) => (b.id === booking.id ? updated : b)));
+      const statusLabel = BOOKING_STATUS_META[status].label;
       setSaveMessage(
         notifyNote
-          ? `Booking status updated to ${status}. ${notifyNote}`
-          : 'Booking status updated in Firestore.'
+          ? `Booking ${booking.referenceCode} updated to ${statusLabel} and saved in Firestore. ${notifyNote}`
+          : `Booking ${booking.referenceCode} updated to ${statusLabel} and saved in Firestore.`
       );
     } catch (error) {
       setSaveError(extractReadableError(error, 'Could not update booking status.'));
+    } finally {
+      setUpdatingBookingId(null);
     }
   };
 
@@ -422,36 +485,45 @@ export function OwnerPortalModal({
       return;
     }
 
+    setUpdatingBookingId(booking.id);
     try {
-      let sentKey: string | undefined;
-      let notifyNote = '';
+      // Save new appointment date and time permanently in Firestore first
+      let updated = await updateOwnerBookingDetails(booking, {
+        preferredDate: rescheduleDate,
+        preferredTime: rescheduleTime,
+      });
+      setBookings((prev) => prev.map((b) => (b.id === booking.id ? updated : b)));
+      setReschedulingBookingId(null);
 
+      let notifyNote = '';
       if (booking.status === 'confirmed') {
         const notifyResult = await sendCustomerNotificationIfEligible(
-          booking,
+          updated,
           'customer_rescheduled',
           rescheduleDate,
           rescheduleTime
         );
-        sentKey = notifyResult.sentKey;
         notifyNote = notifyResult.note;
+        if (notifyResult.sentKey) {
+          const withKey = await updateOwnerBookingDetails(updated, {
+            appendNotificationKey: notifyResult.sentKey,
+          }).catch(() => null);
+          if (withKey) {
+            updated = withKey;
+            setBookings((prev) => prev.map((b) => (b.id === booking.id ? withKey : b)));
+          }
+        }
       }
 
-      const updated = await updateOwnerBookingDetails(booking, {
-        preferredDate: rescheduleDate,
-        preferredTime: rescheduleTime,
-        appendNotificationKey: sentKey,
-      });
-
-      setBookings((prev) => prev.map((b) => (b.id === booking.id ? updated : b)));
-      setReschedulingBookingId(null);
       setSaveMessage(
         notifyNote
-          ? `Appointment updated in Firestore. ${notifyNote}`
-          : 'Appointment date and time updated in Firestore.'
+          ? `Appointment updated and saved in Firestore. ${notifyNote}`
+          : 'Appointment date and time updated and saved in Firestore.'
       );
     } catch (error) {
       setSaveError(extractReadableError(error, 'Could not update appointment schedule.'));
+    } finally {
+      setUpdatingBookingId(null);
     }
   };
 
@@ -470,24 +542,12 @@ export function OwnerPortalModal({
 
       if (action === 'apply_reschedule' && matchingBooking && request.requestedDate) {
         const nextTime = request.requestedTime || matchingBooking.preferredTime;
-        let sentKey: string | undefined;
-        if (matchingBooking.status === 'confirmed' || matchingBooking.status === 'pending') {
-          const eventName: 'customer_confirmed' | 'customer_rescheduled' =
-            matchingBooking.status === 'confirmed' ? 'customer_rescheduled' : 'customer_confirmed';
-          const res = await sendCustomerNotificationIfEligible(
-            matchingBooking,
-            eventName,
-            request.requestedDate,
-            nextTime
-          );
-          sentKey = res.sentKey;
-          notifyNote = res.note;
-        }
-        const updatedBooking = await updateOwnerBookingDetails(matchingBooking, {
+        const previousStatus = matchingBooking.status;
+        // Persist schedule and confirmed status in Firestore first
+        let updatedBooking = await updateOwnerBookingDetails(matchingBooking, {
           status: 'confirmed',
           preferredDate: request.requestedDate,
           preferredTime: nextTime,
-          appendNotificationKey: sentKey,
         });
         setBookings((prev) =>
           prev.map((b) => (b.id === matchingBooking.id ? updatedBooking : b))
@@ -496,27 +556,41 @@ export function OwnerPortalModal({
         setChangeRequests((prev) =>
           prev.map((r) => (r.id === request.id ? { ...r, status: 'completed' } : r))
         );
+
+        if (previousStatus === 'confirmed' || previousStatus === 'pending') {
+          const eventName: 'customer_confirmed' | 'customer_rescheduled' =
+            previousStatus === 'confirmed' ? 'customer_rescheduled' : 'customer_confirmed';
+          const res = await sendCustomerNotificationIfEligible(
+            updatedBooking,
+            eventName,
+            request.requestedDate,
+            nextTime
+          );
+          notifyNote = res.note;
+          if (res.sentKey) {
+            const withKey = await updateOwnerBookingDetails(updatedBooking, {
+              appendNotificationKey: res.sentKey,
+            }).catch(() => null);
+            if (withKey) {
+              updatedBooking = withKey;
+              setBookings((prev) =>
+                prev.map((b) => (b.id === matchingBooking.id ? withKey : b))
+              );
+            }
+          }
+        }
+
         setSaveMessage(
-          `Reschedule applied to ${request.referenceCode}. ${notifyNote}`.trim()
+          `Reschedule applied to ${request.referenceCode} and saved in Firestore. ${notifyNote}`.trim()
         );
         return;
       }
 
       if (action === 'apply_cancel' && matchingBooking) {
-        let sentKey: string | undefined;
-        if (matchingBooking.status === 'confirmed') {
-          const res = await sendCustomerNotificationIfEligible(
-            matchingBooking,
-            'customer_cancelled',
-            matchingBooking.preferredDate,
-            matchingBooking.preferredTime
-          );
-          sentKey = res.sentKey;
-          notifyNote = res.note;
-        }
-        const updatedBooking = await updateOwnerBookingDetails(matchingBooking, {
+        const previousStatus = matchingBooking.status;
+        // Persist cancellation in Firestore first
+        let updatedBooking = await updateOwnerBookingDetails(matchingBooking, {
           status: 'cancelled',
-          appendNotificationKey: sentKey,
         });
         setBookings((prev) =>
           prev.map((b) => (b.id === matchingBooking.id ? updatedBooking : b))
@@ -525,7 +599,31 @@ export function OwnerPortalModal({
         setChangeRequests((prev) =>
           prev.map((r) => (r.id === request.id ? { ...r, status: 'completed' } : r))
         );
-        setSaveMessage(`Booking ${request.referenceCode} cancelled. ${notifyNote}`.trim());
+
+        if (previousStatus === 'confirmed') {
+          const res = await sendCustomerNotificationIfEligible(
+            updatedBooking,
+            'customer_cancelled',
+            updatedBooking.preferredDate,
+            updatedBooking.preferredTime
+          );
+          notifyNote = res.note;
+          if (res.sentKey) {
+            const withKey = await updateOwnerBookingDetails(updatedBooking, {
+              appendNotificationKey: res.sentKey,
+            }).catch(() => null);
+            if (withKey) {
+              updatedBooking = withKey;
+              setBookings((prev) =>
+                prev.map((b) => (b.id === matchingBooking.id ? withKey : b))
+              );
+            }
+          }
+        }
+
+        setSaveMessage(
+          `Booking ${request.referenceCode} cancelled and saved in Firestore. ${notifyNote}`.trim()
+        );
         return;
       }
 
@@ -845,77 +943,79 @@ export function OwnerPortalModal({
               {/* Tab 1: Bookings */}
               {activeTab === 'bookings' && (
                 <div className="space-y-4">
-                  <div className="flex flex-col gap-3">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        {(
-                          [
-                            { id: 'all', label: `All (${bookings.length})` },
-                            {
-                              id: 'pending',
-                              label: `Pending (${bookings.filter((b) => b.status === 'pending').length})`,
-                            },
-                            {
-                              id: 'confirmed',
-                              label: `Confirmed (${bookings.filter((b) => b.status === 'confirmed').length})`,
-                            },
-                            {
-                              id: 'completed',
-                              label: `Completed (${bookings.filter((b) => b.status === 'completed').length})`,
-                            },
-                            {
-                              id: 'cancelled',
-                              label: `Cancelled (${bookings.filter((b) => b.status === 'cancelled').length})`,
-                            },
-                            {
-                              id: 'history',
-                              label: `History (${bookings.filter((b) => b.status === 'completed' || b.status === 'cancelled').length})`,
-                            },
-                          ] as const
-                        ).map((filterOption) => (
-                          <button
-                            key={filterOption.id}
-                            type="button"
-                            onClick={() => setBookingFilter(filterOption.id)}
-                            className={`px-3 py-1.5 min-h-[34px] text-xs font-medium rounded-lg border transition-colors cursor-pointer ${
-                              bookingFilter === filterOption.id
-                                ? 'bg-[#1B4332] text-white border-[#1B4332]'
-                                : 'bg-white text-[#525753] border-[#DFD6C7] hover:border-[#1B4332]'
+                  {/* Category Overview & Counts */}
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2">
+                    {(
+                      [
+                        { id: 'all', label: 'All', count: statusCounts.all },
+                        { id: 'pending', label: 'Pending', count: statusCounts.pending },
+                        { id: 'confirmed', label: 'Confirmed', count: statusCounts.confirmed },
+                        { id: 'completed', label: 'Completed', count: statusCounts.completed },
+                        { id: 'cancelled', label: 'Cancelled', count: statusCounts.cancelled },
+                        { id: 'rejected', label: 'Rejected', count: statusCounts.rejected },
+                      ] as const
+                    ).map((cat) => {
+                      const isActive = bookingFilter === cat.id;
+                      return (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setBookingFilter(cat.id)}
+                          className={`p-2.5 rounded-xl border text-left transition-colors cursor-pointer ${
+                            isActive
+                              ? 'bg-[#1B4332] text-white border-[#1B4332]'
+                              : 'bg-white text-[#222523] border-[#DFD6C7] hover:border-[#1B4332]'
+                          }`}
+                        >
+                          <span
+                            className={`block text-[11px] font-medium ${
+                              isActive ? 'text-white/80' : 'text-[#525753]'
                             }`}
                           >
-                            {filterOption.label}
-                          </button>
-                        ))}
-                      </div>
+                            {cat.label}
+                          </span>
+                          <span className="block font-display text-lg font-semibold tabular-nums mt-0.5">
+                            {cat.count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={loadBookings}
-                        disabled={bookingsLoading}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 min-h-[34px] text-xs font-medium text-[#1B4332] bg-white hover:bg-[#F4EFE6] border border-[#DFD6C7] rounded-lg cursor-pointer"
-                      >
-                        <RefreshCw
-                          className={`w-3.5 h-3.5 ${bookingsLoading ? 'animate-spin' : ''}`}
-                          aria-hidden="true"
-                        />
-                        <span>Refresh</span>
-                      </button>
-                    </div>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-xs text-[#525753]">
+                      {bookingFilter === 'all'
+                        ? `Showing all ${statusCounts.all} booking${statusCounts.all === 1 ? '' : 's'} across all categories.`
+                        : `${BOOKING_STATUS_META[bookingFilter].label}: ${BOOKING_STATUS_META[bookingFilter].description}.`}
+                    </p>
 
-                    <div className="relative">
-                      <Search
-                        className="w-4 h-4 text-[#525753] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                    <button
+                      type="button"
+                      onClick={loadBookings}
+                      disabled={bookingsLoading}
+                      className="inline-flex items-center self-start sm:self-auto gap-1.5 px-3 py-1.5 min-h-[34px] text-xs font-medium text-[#1B4332] bg-white hover:bg-[#F4EFE6] border border-[#DFD6C7] rounded-lg cursor-pointer shrink-0"
+                    >
+                      <RefreshCw
+                        className={`w-3.5 h-3.5 ${bookingsLoading ? 'animate-spin' : ''}`}
                         aria-hidden="true"
                       />
-                      <input
-                        type="search"
-                        value={bookingSearch}
-                        onChange={(e) => setBookingSearch(e.target.value)}
-                        placeholder="Search bookings by reference code, customer name, phone, or estate..."
-                        aria-label="Search bookings"
-                        className="w-full pl-9 pr-3.5 py-2 min-h-[40px] rounded-xl border border-[#DFD6C7] bg-white text-sm text-[#222523] placeholder:text-[#525753]/70 focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
-                      />
-                    </div>
+                      <span>Refresh</span>
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <Search
+                      className="w-4 h-4 text-[#525753] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                      aria-hidden="true"
+                    />
+                    <input
+                      type="search"
+                      value={bookingSearch}
+                      onChange={(e) => setBookingSearch(e.target.value)}
+                      placeholder="Search bookings by reference code, customer name, phone, email, estate, or service..."
+                      aria-label="Search bookings"
+                      className="w-full pl-9 pr-3.5 py-2 min-h-[40px] rounded-xl border border-[#DFD6C7] bg-white text-sm text-[#222523] placeholder:text-[#525753]/70 focus:outline-none focus:ring-2 focus:ring-[#1B4332]"
+                    />
                   </div>
 
                   {changeRequests.some((r) => r.status === 'pending') && (
@@ -1015,7 +1115,7 @@ export function OwnerPortalModal({
                       <p className="font-display text-lg text-[#222523] mb-1">
                         {bookingFilter === 'all'
                           ? 'No booking requests yet'
-                          : `No ${bookingFilter} bookings`}
+                          : `No ${BOOKING_STATUS_META[bookingFilter].label.toLowerCase()} bookings`}
                       </p>
                       <p className="text-sm text-[#525753]">
                         Customer booking submissions from the website will appear here automatically.
@@ -1023,6 +1123,8 @@ export function OwnerPortalModal({
                     </div>
                   ) : (
                     filteredBookings.map((booking) => {
+                      const statusMeta =
+                        BOOKING_STATUS_META[booking.status] || BOOKING_STATUS_META.pending;
                       const replyUrl = buildWhatsAppUrl(
                         booking.phoneNumber.startsWith('0')
                           ? `254${booking.phoneNumber.slice(1)}`
@@ -1031,25 +1133,32 @@ export function OwnerPortalModal({
                       );
                       const isConfirmingDelete = pendingDeleteBookingId === booking.id;
                       const isRescheduling = reschedulingBookingId === booking.id;
+                      const isExpanded = expandedBookingId === booking.id;
+                      const isBusy = updatingBookingId === booking.id;
                       return (
                         <div
                           key={booking.id}
-                          className="p-5 rounded-xl border border-[#DFD6C7] bg-white space-y-3"
+                          className="p-5 rounded-xl border border-[#DFD6C7] bg-white space-y-3.5"
                         >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-3">
                             <div>
-                              <div className="flex flex-wrap items-center gap-2 mb-1">
-                                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded bg-[#DCE6DD]/70 text-[#1B4332]">
+                              <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                                <span className="font-mono text-xs font-semibold px-2.5 py-0.5 rounded bg-[#DCE6DD]/70 text-[#1B4332]">
                                   {booking.referenceCode}
                                 </span>
+                                <span
+                                  className={`text-xs font-medium px-2.5 py-0.5 rounded border ${statusMeta.badgeClass}`}
+                                >
+                                  {statusMeta.label}
+                                </span>
                                 <span className="text-xs font-medium text-[#4F6F58] tabular-nums">
-                                  {booking.preferredDate} ({booking.preferredTime})
+                                  {booking.preferredDate} · {booking.preferredTime}
                                 </span>
                               </div>
                               <h4 className="font-display text-lg font-medium text-[#222523]">
                                 {booking.fullName}
                               </h4>
-                              <p className="text-xs text-[#525753]">
+                              <p className="text-xs text-[#525753] mt-0.5">
                                 Submitted:{' '}
                                 {new Date(booking.createdAt).toLocaleString('en-KE', {
                                   dateStyle: 'medium',
@@ -1072,41 +1181,81 @@ export function OwnerPortalModal({
 
                             <div className="flex flex-wrap items-center gap-2">
                               {booking.status === 'pending' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleUpdateBookingStatus(booking, 'confirmed')}
-                                  className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#DCE6DD] hover:bg-[#c8dac9] rounded-lg transition-colors cursor-pointer"
-                                >
-                                  Confirm
-                                </button>
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleUpdateBookingStatus(booking, 'confirmed')}
+                                    className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-white bg-[#1B4332] hover:bg-[#143325] disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    Confirm
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleUpdateBookingStatus(booking, 'rejected')}
+                                    className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    Reject
+                                  </button>
+                                </>
                               )}
                               {booking.status === 'confirmed' && (
+                                <>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleUpdateBookingStatus(booking, 'completed')}
+                                    className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#DCE6DD] hover:bg-[#c8dac9] disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    Mark Completed
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isBusy}
+                                    onClick={() => handleUpdateBookingStatus(booking, 'cancelled')}
+                                    className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-red-800 bg-red-50 hover:bg-red-100 border border-red-200 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
+                                  >
+                                    Cancel
+                                  </button>
+                                </>
+                              )}
+                              {(booking.status === 'pending' || booking.status === 'confirmed') && (
                                 <button
                                   type="button"
-                                  onClick={() => handleUpdateBookingStatus(booking, 'completed')}
-                                  className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#DCE6DD] hover:bg-[#c8dac9] rounded-lg transition-colors cursor-pointer"
+                                  disabled={isBusy}
+                                  onClick={() => {
+                                    if (isRescheduling) {
+                                      setReschedulingBookingId(null);
+                                    } else {
+                                      setReschedulingBookingId(booking.id);
+                                      setRescheduleDate(booking.preferredDate);
+                                      setRescheduleTime(booking.preferredTime || PREFERRED_TIMES[0]);
+                                    }
+                                  }}
+                                  className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#222523] hover:text-[#1B4332] bg-[#FAF8F4] border border-[#DFD6C7] hover:border-[#1B4332] rounded-lg transition-colors cursor-pointer"
                                 >
-                                  Mark Completed
+                                  {isRescheduling
+                                    ? 'Close Schedule'
+                                    : booking.status === 'confirmed'
+                                      ? 'Change Date/Time'
+                                      : 'Reschedule'}
                                 </button>
                               )}
                               <button
                                 type="button"
-                                onClick={() => {
-                                  if (isRescheduling) {
-                                    setReschedulingBookingId(null);
-                                  } else {
-                                    setReschedulingBookingId(booking.id);
-                                    setRescheduleDate(booking.preferredDate);
-                                    setRescheduleTime(booking.preferredTime || PREFERRED_TIMES[0]);
-                                  }
-                                }}
-                                className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#525753] hover:text-[#1B4332] bg-[#FAF8F4] border border-[#DFD6C7] rounded-lg transition-colors cursor-pointer"
+                                onClick={() =>
+                                  setExpandedBookingId(isExpanded ? null : booking.id)
+                                }
+                                aria-expanded={isExpanded}
+                                className="px-3 py-1.5 min-h-[38px] text-xs font-medium text-[#1B4332] bg-[#F4EFE6] hover:bg-[#E7E0D3] border border-[#DFD6C7] rounded-lg transition-colors cursor-pointer"
                               >
-                                {isRescheduling ? 'Close Edit' : 'Reschedule'}
+                                {isExpanded ? 'Hide Details' : 'View Details'}
                               </button>
                               <select
                                 aria-label={`Status for ${booking.fullName}`}
                                 value={booking.status}
+                                disabled={isBusy}
                                 onChange={(e) =>
                                   handleUpdateBookingStatus(
                                     booking,
@@ -1119,6 +1268,7 @@ export function OwnerPortalModal({
                                 <option value="confirmed">Confirmed</option>
                                 <option value="completed">Completed</option>
                                 <option value="cancelled">Cancelled</option>
+                                <option value="rejected">Rejected</option>
                               </select>
 
                               {replyUrl && (
@@ -1140,14 +1290,14 @@ export function OwnerPortalModal({
                                     onClick={() => handleDeleteBooking(booking.id)}
                                     className="px-2.5 py-1.5 min-h-[38px] text-xs font-medium text-white bg-red-700 hover:bg-red-800 rounded-lg cursor-pointer"
                                   >
-                                    Confirm
+                                    Confirm Delete
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setPendingDeleteBookingId(null)}
                                     className="px-2.5 py-1.5 min-h-[38px] text-xs font-medium text-[#525753] bg-[#F4EFE6] rounded-lg cursor-pointer"
                                   >
-                                    Cancel
+                                    Keep
                                   </button>
                                 </div>
                               ) : (
@@ -1195,45 +1345,152 @@ export function OwnerPortalModal({
                               <div className="sm:col-span-3">
                                 <button
                                   type="button"
+                                  disabled={isBusy}
                                   onClick={() => handleSaveReschedule(booking)}
-                                  className="w-full px-3 py-2 min-h-[38px] text-xs font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-lg cursor-pointer"
+                                  className="w-full px-3 py-2 min-h-[38px] text-xs font-medium text-white bg-[#1B4332] hover:bg-[#143325] disabled:opacity-60 rounded-lg cursor-pointer"
                                 >
-                                  Save Schedule
+                                  {isBusy ? 'Saving...' : 'Save Schedule'}
                                 </button>
                               </div>
                             </div>
                           )}
 
+                          {/* Summary Booking Fields */}
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs sm:text-sm text-[#525753]">
                             <div>
                               <span className="font-medium text-[#222523]">Phone:</span>{' '}
                               <span className="tabular-nums">{booking.phoneNumber}</span>
                             </div>
                             <div>
-                              <span className="font-medium text-[#222523]">Estate:</span>{' '}
+                              <span className="font-medium text-[#222523]">Location / Estate:</span>{' '}
                               {booking.locationEstate}
                             </div>
                             <div>
-                              <span className="font-medium text-[#222523]">Service:</span>{' '}
-                              {booking.houseType} · {booking.cleaningType}
+                              <span className="font-medium text-[#222523]">House Size:</span>{' '}
+                              {booking.houseType}
                             </div>
+                            <div>
+                              <span className="font-medium text-[#222523]">Cleaning Type:</span>{' '}
+                              {booking.cleaningType}
+                            </div>
+                            {booking.email && (
+                              <div className="sm:col-span-2">
+                                <span className="font-medium text-[#222523]">Email:</span>{' '}
+                                {booking.email}
+                              </div>
+                            )}
                           </div>
 
-                          {booking.email && (
-                            <p className="text-xs sm:text-sm text-[#525753]">
-                              <span className="font-medium text-[#222523]">Email:</span>{' '}
-                              {booking.email}
-                            </p>
+                          <p className="text-xs sm:text-sm text-[#525753]">
+                            <span className="font-medium text-[#222523]">
+                              Products &amp; Equipment:
+                            </span>{' '}
+                            {booking.productPreference}
+                          </p>
+
+                          {isExpanded && (
+                            <div className="p-4 rounded-xl bg-[#FAF8F4] border border-[#DFD6C7] space-y-3 text-xs sm:text-sm">
+                              <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#DFD6C7]">
+                                <span className="font-medium text-[#1B4332]">
+                                  Full Booking Details
+                                </span>
+                                <span className="font-mono text-xs text-[#525753]">
+                                  {booking.referenceCode}
+                                </span>
+                              </div>
+                              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs sm:text-sm">
+                                <div>
+                                  <dt className="text-[#525753]">Booking Reference</dt>
+                                  <dd className="font-mono font-medium text-[#222523] mt-0.5">
+                                    {booking.referenceCode}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Current Status</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {statusMeta.label}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Customer Name</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.fullName}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Phone Number</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5 tabular-nums">
+                                    {booking.phoneNumber}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Email Address</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.email || 'Not provided'}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Location / Estate</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.locationEstate}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">House Size</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.houseType}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Cleaning Type</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.cleaningType}
+                                  </dd>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <dt className="text-[#525753]">
+                                    Products &amp; Equipment Preference
+                                  </dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.productPreference}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">
+                                    Preferred Appointment Date &amp; Time
+                                  </dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5 tabular-nums">
+                                    {booking.preferredDate} · {booking.preferredTime}
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt className="text-[#525753]">Booking Submission Date</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {new Date(booking.createdAt).toLocaleString('en-KE', {
+                                      dateStyle: 'medium',
+                                      timeStyle: 'short',
+                                    })}
+                                  </dd>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <dt className="text-[#525753]">Special Instructions</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.instructions || 'No special instructions provided'}
+                                  </dd>
+                                </div>
+                                <div className="sm:col-span-2">
+                                  <dt className="text-[#525753]">WhatsApp Notifications</dt>
+                                  <dd className="font-medium text-[#222523] mt-0.5">
+                                    {booking.whatsappConsent
+                                      ? 'Customer opted in to WhatsApp updates'
+                                      : 'Customer did not opt in to WhatsApp updates'}
+                                  </dd>
+                                </div>
+                              </dl>
+                            </div>
                           )}
 
-                          {booking.productPreference && (
-                            <p className="text-xs sm:text-sm text-[#525753]">
-                              <span className="font-medium text-[#222523]">Products Option:</span>{' '}
-                              {booking.productPreference}
-                            </p>
-                          )}
-
-                          {booking.instructions && (
+                          {!isExpanded && booking.instructions && (
                             <p className="text-xs sm:text-sm text-[#525753] pt-2 border-t border-[#DFD6C7]">
                               <span className="font-medium text-[#222523]">Instructions:</span>{' '}
                               {booking.instructions}

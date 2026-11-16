@@ -1,5 +1,5 @@
 import { ExternalLink, Mail, MapPin, MessageCircle, Phone } from 'lucide-react';
-import type { MouseEvent } from 'react';
+import { useRef, type MouseEvent } from 'react';
 import type { SiteConfig } from '../shared/types.ts';
 import { BrandMark } from './BrandMark.tsx';
 
@@ -8,6 +8,7 @@ interface ContactFooterProps {
   onWhatsAppClick: () => void;
   onNavigate: (path: string) => void;
   onNavigateHomeSection: (sectionId?: string) => void;
+  onOwnerTrigger?: () => void;
 }
 
 export function ContactFooter({
@@ -15,7 +16,29 @@ export function ContactFooter({
   onWhatsAppClick,
   onNavigate,
   onNavigateHomeSection,
+  onOwnerTrigger,
 }: ContactFooterProps) {
+  const tapStateRef = useRef<{ count: number; lastTapAt: number }>({
+    count: 0,
+    lastTapAt: 0,
+  });
+
+  const handleFooterBrandTap = () => {
+    if (!onOwnerTrigger) return;
+    const now = Date.now();
+    if (now - tapStateRef.current.lastTapAt > 2500) {
+      tapStateRef.current.count = 1;
+    } else {
+      tapStateRef.current.count += 1;
+    }
+    tapStateRef.current.lastTapAt = now;
+
+    if (tapStateRef.current.count >= 5) {
+      tapStateRef.current.count = 0;
+      tapStateRef.current.lastTapAt = 0;
+      onOwnerTrigger();
+    }
+  };
   const socialEntries = [
     { key: 'instagram', label: 'Instagram', url: config.socialLinks.instagram },
     { key: 'facebook', label: 'Facebook', url: config.socialLinks.facebook },
@@ -143,7 +166,9 @@ export function ContactFooter({
       <footer className="bg-[#FAF8F4] py-10 sm:py-12">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="flex items-center gap-4 sm:gap-5">
-            <BrandMark variant="footer" logoText={config.logoText} />
+            <div onClick={handleFooterBrandTap} className="select-none touch-manipulation">
+              <BrandMark variant="footer" logoText={config.logoText} />
+            </div>
             <div>
               <p className="font-display text-base sm:text-lg font-semibold text-[#1B4332]">
                 {config.businessName}

@@ -44,6 +44,7 @@ export default function App() {
   const [selectedCleaningType, setSelectedCleaningType] = useState<string>(CLEANING_TYPES[0]);
 
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
+  const [ownerEntryOpen, setOwnerEntryOpen] = useState(false);
 
   const isPrivacyRoute = pathname === '/privacy-policy';
   const isTermsRoute = pathname === '/terms-of-use';
@@ -56,6 +57,23 @@ export default function App() {
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isOwnerShortcut =
+        e.shiftKey &&
+        (e.ctrlKey || e.metaKey || e.altKey) &&
+        e.key.toLowerCase() === 'l';
+      if (isOwnerShortcut) {
+        e.preventDefault();
+        setOwnerEntryOpen(true);
+      } else if (e.key === 'Escape' && ownerEntryOpen) {
+        setOwnerEntryOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [ownerEntryOpen]);
 
   useEffect(() => {
     if (isPrivacyRoute) {
@@ -257,6 +275,7 @@ export default function App() {
           onWhatsAppClick={() => handleOpenWhatsApp()}
           onNavigate={navigate}
           onNavigateHomeSection={navigateHomeSection}
+          onOwnerTrigger={() => setOwnerEntryOpen(true)}
         />
       </main>
 
@@ -277,6 +296,20 @@ export default function App() {
         onClose={() => setWhatsAppModalOpen(false)}
         onGoToBooking={scrollToBooking}
       />
+
+      {ownerEntryOpen && (
+        <Suspense fallback={null}>
+          <OwnerPortalModal
+            isOpen={ownerEntryOpen}
+            initialTab="bookings"
+            onClose={() => setOwnerEntryOpen(false)}
+            config={config}
+            pricing={pricing}
+            services={services}
+            onDataUpdated={handleOwnerDataUpdated}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

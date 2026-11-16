@@ -84,7 +84,7 @@
         },
         "status": {
           "type": "string",
-          "enum": ["pending", "confirmed", "completed", "cancelled"],
+          "enum": ["pending", "confirmed", "completed", "cancelled", "rejected"],
           "description": "Current booking lifecycle status."
         },
         "whatsappConsent": {

@@ -506,7 +506,14 @@ export async function fetchOwnerBookings(): Promise<BookingRecord[]> {
         sentNotificationKeys: Array.isArray(raw.sentNotificationKeys)
           ? raw.sentNotificationKeys.filter((k): k is string => typeof k === 'string')
           : [],
-        status: (raw.status as BookingStatus) || 'pending',
+        status:
+          raw.status === 'pending' ||
+          raw.status === 'confirmed' ||
+          raw.status === 'completed' ||
+          raw.status === 'cancelled' ||
+          raw.status === 'rejected'
+            ? raw.status
+            : 'pending',
         createdAt: toIsoString(raw.createdAt) || new Date().toISOString(),
         updatedAt: toIsoString(raw.updatedAt),
       };
@@ -565,7 +572,17 @@ export async function updateOwnerBookingDetails(
       ? [...existingKeys, updates.appendNotificationKey].slice(-30)
       : existingKeys;
 
-  const nextStatus = updates.status ?? booking.status;
+  const allowedStatuses: BookingStatus[] = [
+    'pending',
+    'confirmed',
+    'completed',
+    'cancelled',
+    'rejected',
+  ];
+  const candidateStatus = updates.status ?? booking.status;
+  const nextStatus: BookingStatus = allowedStatuses.includes(candidateStatus)
+    ? candidateStatus
+    : booking.status;
   const nextDate = updates.preferredDate ?? booking.preferredDate;
   const nextTime = updates.preferredTime ?? booking.preferredTime;
 

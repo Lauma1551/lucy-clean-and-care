@@ -114,7 +114,7 @@ service cloud.firestore {
         data.sentNotificationKeys.size() == 0 ||
         (data.sentNotificationKeys[0] is string && data.sentNotificationKeys[0].size() <= 120)
       )
-      && data.status in ['pending', 'confirmed', 'completed', 'cancelled']
+      && data.status in ['pending', 'confirmed', 'completed', 'cancelled', 'rejected']
       && data.createdAt is timestamp
       && data.updatedAt is timestamp;
     }

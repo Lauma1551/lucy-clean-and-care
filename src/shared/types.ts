@@ -44,7 +44,7 @@ export interface PricingCategory {
   updatedAt?: string;
 }
 
-export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';
+export type BookingStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'rejected';
 
 export interface BookingRequestPayload {
   fullName: string;
