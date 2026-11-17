@@ -27,12 +27,14 @@ import type {
   PricingCategory,
   SiteConfig,
 } from '../shared/types.ts';
-import { buildBookingWhatsAppMessage, formatKesPrice } from '../utils/whatsapp.ts';
+import { buildBookingWhatsAppMessage } from '../utils/whatsapp.ts';
+import { CLEANING_PRICE_MATRIX, type HomeOccupancyOption } from './PricingSection.tsx';
 
 interface BookingSectionProps {
   config: SiteConfig;
   selectedHouseType: string;
   selectedCleaningType: string;
+  selectedOccupancy?: HomeOccupancyOption;
   pricing: PricingCategory[];
   onContinueOnWhatsApp: (message: string) => void;
 }
@@ -49,7 +51,7 @@ export function BookingSection({
   config,
   selectedHouseType,
   selectedCleaningType,
-  pricing,
+  selectedOccupancy = 'occupied',
   onContinueOnWhatsApp,
 }: BookingSectionProps) {
   const [form, setForm] = useState<BookingRequestPayload>({
@@ -65,6 +67,7 @@ export function BookingSection({
     instructions: '',
     whatsappConsent: false,
   });
+  const [occupancy, setOccupancy] = useState<HomeOccupancyOption>(selectedOccupancy);
 
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -94,7 +97,24 @@ export function BookingSection({
     }));
   }, [selectedHouseType, selectedCleaningType]);
 
-  const matchingTier = pricing.find((tier) => tier.houseTypeValue === form.houseType);
+  useEffect(() => {
+    if (selectedOccupancy) {
+      setOccupancy(selectedOccupancy);
+    }
+  }, [selectedOccupancy]);
+
+  const matchingPriceRow = CLEANING_PRICE_MATRIX.find(
+    (row) => row.houseTypeValue === form.houseType
+  );
+  const indicativeRateLabel = matchingPriceRow
+    ? occupancy === 'new_unoccupied'
+      ? matchingPriceRow.newHousePrice
+      : matchingPriceRow.occupiedPrice
+    : 'Request a Quote';
+  const occupancyLabel =
+    occupancy === 'new_unoccupied'
+      ? 'New House Cleaning – Before Occupation (Unoccupied)'
+      : 'Standard Cleaning – Occupied Home';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -116,7 +136,15 @@ export function BookingSection({
 
     setIsSubmitting(true);
     try {
-      const savedBooking = await submitCustomerBooking(form);
+      const occupancyTag = `Home Occupancy: ${occupancyLabel}`;
+      const combinedInstructions = form.instructions.trim()
+        ? `${occupancyTag}\n${form.instructions.trim()}`
+        : occupancyTag;
+
+      const savedBooking = await submitCustomerBooking({
+        ...form,
+        instructions: combinedInstructions,
+      });
       setConfirmedBooking(savedBooking);
       setFieldErrors({});
 
@@ -245,6 +273,12 @@ export function BookingSection({
               </div>
               <div className="pt-3 border-t border-[#DDD4C3]">
                 <span className="block text-xs font-medium text-[#525753] mb-1">
+                  Home Occupancy
+                </span>
+                <span className="text-sm font-medium text-[#222523]">{occupancyLabel}</span>
+              </div>
+              <div className="pt-3 border-t border-[#DDD4C3]">
+                <span className="block text-xs font-medium text-[#525753] mb-1">
                   Products Preference
                 </span>
                 <span className="text-sm font-medium text-[#222523]">
@@ -252,15 +286,15 @@ export function BookingSection({
                 </span>
               </div>
               <div className="pt-3 border-t border-[#DDD4C3] flex items-center justify-between gap-4">
-                <span className="text-sm text-[#525753]">Estimated Rate</span>
+                <span className="text-sm text-[#525753]">Indicative Rate</span>
                 <span className="text-base font-semibold text-[#1B4332] tabular-nums">
-                  {formatKesPrice(matchingTier ? matchingTier.priceKes : null)}
+                  {indicativeRateLabel}
                 </span>
               </div>
               <p className="text-xs text-[#525753] leading-relaxed">
-                Final pricing may differ depending on house size, home condition, and whether{' '}
-                {config.businessName} supplies the cleaning products and equipment or you provide
-                them.
+                All prices are indicative and may vary depending on house size, location and
+                cleaning requirements. Final quotations are confirmed with you before booking
+                acceptance.
               </p>
             </div>
           </div>
@@ -544,6 +578,57 @@ export function BookingSection({
                     {fieldErrors.cleaningType && (
                       <p className="mt-1 text-xs text-red-700">{fieldErrors.cleaningType}</p>
                     )}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="block text-sm font-medium text-[#222523] mb-2">
+                    Home Occupancy Category
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {(
+                      [
+                        {
+                          id: 'occupied',
+                          title: 'Occupied Home',
+                          desc: 'Standard cleaning for a home you currently live in',
+                        },
+                        {
+                          id: 'new_unoccupied',
+                          title: 'New House – Before Occupation',
+                          desc: 'Pre-occupation clean for a new, empty house',
+                        },
+                      ] as const
+                    ).map((opt) => {
+                      const isSelected = occupancy === opt.id;
+                      return (
+                        <label
+                          key={opt.id}
+                          className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'border-[#1B4332] bg-[#DCE6DD]/55'
+                              : 'border-[#DDD4C3] bg-white hover:border-[#4F6F58]'
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="homeOccupancy"
+                            value={opt.id}
+                            checked={isSelected}
+                            onChange={() => setOccupancy(opt.id)}
+                            className="mt-1 accent-[#1B4332]"
+                          />
+                          <span>
+                            <span className="block text-sm font-medium text-[#222523] leading-snug">
+                              {opt.title}
+                            </span>
+                            <span className="block text-xs text-[#525753] mt-0.5 leading-snug">
+                              {opt.desc}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
                   </div>
                 </div>
 

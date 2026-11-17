@@ -1,94 +1,78 @@
-import { ArrowRight, MessageCircle } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { FOUNDER_IMAGE_URL } from '../shared/defaults.ts';
 import type { SiteConfig } from '../shared/types.ts';
 import { ResilientImage } from './ResilientImage.tsx';
 
-interface TeamSectionProps {
+interface FounderSectionProps {
   config: SiteConfig;
-  onBookClick: () => void;
-  onWhatsAppInquiry: (customMessage: string) => void;
+  onBookClick?: () => void;
 }
 
-export function TeamSection({ config, onBookClick, onWhatsAppInquiry }: TeamSectionProps) {
+export function FounderSection({ config }: FounderSectionProps) {
+  const founderName = config.founderName || 'Lucy Auma Aluoch';
+
   return (
     <section
       id="team"
-      className="py-16 sm:py-22 lg:py-24 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
+      className="py-10 sm:py-14 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-10">
-        {/* Meet the Founder Card */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, amount: 0.15 }}
-          transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-          className="bg-[#FAF8F4] rounded-3xl border border-[#DDD4C3] p-6 sm:p-10 lg:p-12 shadow-[0_18px_42px_-18px_rgba(27,67,50,0.16)]"
+          viewport={{ once: true, amount: 0.2 }}
+          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+          className="bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] p-5 sm:p-7 shadow-[0_10px_28px_-18px_rgba(27,67,50,0.12)]"
         >
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
-            {/* Portrait Column */}
-            <div className="lg:col-span-5 flex flex-col items-center lg:items-stretch">
-              <div className="w-full max-w-[340px] lg:max-w-none mx-auto rounded-2xl bg-[#EFE9DC] p-3 sm:p-3.5 border border-[#DDD4C3] shadow-[0_12px_28px_-14px_rgba(27,67,50,0.15)]">
-                <div className="aspect-[4/5] w-full overflow-hidden rounded-xl border border-[#1B4332]/20 bg-[#E7E0D3]">
-                  <ResilientImage
-                    src={FOUNDER_IMAGE_URL}
-                    alt={`${config.founderName}, Founder of ${config.businessName}`}
-                    fallbackTitle={config.founderName}
-                    className="w-full h-full object-cover object-[50%_18%] scale-[1.06]"
-                  />
-                </div>
-                <div className="pt-3.5 px-1">
-                  <p className="font-display text-base font-medium text-[#222523]">
-                    {config.founderName}
-                  </p>
-                  <p className="text-xs text-[#4F6F58] font-medium mt-0.5">
-                    Founder <span aria-hidden="true">|</span> {config.businessName}
-                  </p>
-                </div>
-              </div>
+          <h2 className="text-xs font-medium tracking-wide text-[#4F6F58] mb-3.5">
+            Meet the Founder
+          </h2>
+
+          <div className="flex items-start sm:items-center gap-4 sm:gap-6">
+            <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 overflow-hidden rounded-xl border border-[#DDD4C3] bg-[#E7E0D3]">
+              <ResilientImage
+                src={FOUNDER_IMAGE_URL}
+                alt={`${founderName}, Founder of ${config.businessName}`}
+                fallbackTitle={founderName}
+                className="w-full h-full object-cover object-[50%_18%]"
+              />
             </div>
 
-            {/* Founder Introduction Column */}
-            <div className="lg:col-span-7 flex flex-col justify-center">
-              <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-2.5">
-                About the Founder
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-lg sm:text-xl font-semibold text-[#222523] leading-snug">
+                {founderName}
               </p>
-              <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] mb-2.5">
-                Meet the Founder
-              </h2>
-              <div className="mb-6">
-                <p className="font-display text-xl font-medium text-[#222523]">
-                  {config.founderName}
-                </p>
-                <p className="text-sm font-medium text-[#4F6F58] mt-0.5">
-                  Founder <span aria-hidden="true">|</span> {config.businessName}
-                </p>
-              </div>
-
-              <div className="space-y-4 text-base text-[#3B3F3C] leading-relaxed">
-                {config.founderBio
-                  .split(/\n\s*\n/)
-                  .map((paragraph) => paragraph.trim())
-                  .filter(Boolean)
-                  .map((paragraph, idx) => (
-                    <p key={idx}>{paragraph}</p>
-                  ))}
-              </div>
-
-              <div className="mt-8 pt-6 border-t border-[#DDD4C3] flex flex-wrap items-center gap-4">
-                <button
-                  type="button"
-                  onClick={onBookClick}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-2.5 min-h-[44px] text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-xl shadow-[0_8px_18px_-8px_rgba(27,67,50,0.45)] transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332]"
-                >
-                  <span>Book a Cleaning</span>
-                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </button>
-              </div>
+              <p className="text-xs sm:text-sm font-medium text-[#4F6F58] mt-0.5 mb-2">
+                Founder <span aria-hidden="true">|</span> {config.businessName}
+              </p>
+              <p className="text-sm text-[#3B3F3C] leading-relaxed">
+                I founded {config.businessName} with a simple vision: to make homes cleaner, fresher
+                and more comfortable through reliable and thoughtful cleaning services.
+              </p>
             </div>
           </div>
         </motion.div>
+      </div>
+    </section>
+  );
+}
 
+interface FutureRecruitmentSectionProps {
+  config: SiteConfig;
+  onWhatsAppInquiry: (customMessage: string) => void;
+}
+
+export function FutureRecruitmentSection({
+  config,
+  onWhatsAppInquiry,
+}: FutureRecruitmentSectionProps) {
+  return (
+    <section
+      id="recruitment"
+      className="py-16 sm:py-22 lg:py-24 border-b border-[#DDD4C3]"
+    >
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Future Recruitment */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
@@ -101,9 +85,9 @@ export function TeamSection({ config, onBookClick, onWhatsAppInquiry }: TeamSect
             <p className="text-xs font-medium tracking-wide text-[#DCE6DD] mb-2.5">
               Future Recruitment
             </p>
-            <h3 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-[#FAF8F4] [text-wrap:balance] mb-3">
+            <h2 className="font-display text-2xl sm:text-3xl font-medium tracking-tight text-[#FAF8F4] [text-wrap:balance] mb-3">
               Growing our residential cleaning team.
-            </h3>
+            </h2>
             <p className="text-sm sm:text-base text-[#E6ECE7] leading-relaxed mb-5">
               As {config.businessName} expands across {config.serviceAreas.toLowerCase()}, we
               welcome expressions of interest from dependable, detail-oriented residential cleaners
@@ -133,5 +117,20 @@ export function TeamSection({ config, onBookClick, onWhatsAppInquiry }: TeamSect
         </motion.div>
       </div>
     </section>
+  );
+}
+
+interface TeamSectionProps {
+  config: SiteConfig;
+  onBookClick: () => void;
+  onWhatsAppInquiry: (customMessage: string) => void;
+}
+
+export function TeamSection({ config, onBookClick, onWhatsAppInquiry }: TeamSectionProps) {
+  return (
+    <>
+      <FutureRecruitmentSection config={config} onWhatsAppInquiry={onWhatsAppInquiry} />
+      <FounderSection config={config} onBookClick={onBookClick} />
+    </>
   );
 }

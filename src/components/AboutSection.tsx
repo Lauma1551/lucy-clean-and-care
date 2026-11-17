@@ -1,11 +1,32 @@
 import { motion } from 'motion/react';
 import type { SiteConfig } from '../shared/types.ts';
+import { ResilientImage } from './ResilientImage.tsx';
 
 interface AboutSectionProps {
-  config: SiteConfig;
+  config?: SiteConfig;
 }
 
+const ABOUT_SHOWCASE_PHOTOS = [
+  {
+    src: '/src/assets/images/about_kitchen_clean_1794945012510.jpg',
+    alt: 'Cleaning a kitchen countertop and stainless steel sink',
+    caption: 'Kitchen cleaning',
+  },
+  {
+    src: '/src/assets/images/about_sink_clean_1794945012422.jpg',
+    alt: 'Cleaning a porcelain bathroom sink and chrome tap',
+    caption: 'Bathroom sink care',
+  },
+  {
+    src: '/src/assets/images/about_floor_mop_1794945013223.jpg',
+    alt: 'Mopping a home floor using a mop and bucket',
+    caption: 'Floor mopping',
+  },
+] as const;
+
 export function AboutSection({ config }: AboutSectionProps) {
+  const businessName = config?.businessName || 'Lucy Clean & Care';
+
   return (
     <section
       id="about"
@@ -13,56 +34,53 @@ export function AboutSection({ config }: AboutSectionProps) {
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: 12 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.2 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-14 items-start"
+          className="max-w-2xl mx-auto text-center mb-12 sm:mb-14"
         >
-          <div className="lg:col-span-5">
-            <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
-              About Us
-            </p>
-            <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance]">
-              Thoughtful residential cleaning in {config.city}.
-            </h2>
-          </div>
-
-          <div className="lg:col-span-7 space-y-5 text-base sm:text-[17px] text-[#3B3F3C] leading-relaxed">
-            <p>
-              {config.businessName} was founded with a simple mission: to make clean, comfortable
-              and welcoming homes accessible to everyone.
-            </p>
-            <p>
-              We believe that every home deserves attention, care and proper cleaning, regardless of
-              its size.
-            </p>
-            <p>
-              We are building a reliable cleaning service in {config.serviceAreas.toLowerCase()}{' '}
-              that puts customer satisfaction, attention to detail and professionalism first.
-            </p>
-
-            <div className="pt-5 border-t border-[#DDD4C3] grid grid-cols-1 sm:grid-cols-2 gap-5 text-sm text-[#525753]">
-              <div className="bg-[#FAF8F4] rounded-xl border border-[#DDD4C3] p-4">
-                <span className="block font-medium text-[#1B4332] mb-1">
-                  Who we serve
-                </span>
-                <span>
-                  Individuals, families, tenants, and homeowners across {config.serviceAreas}.
-                </span>
-              </div>
-              <div className="bg-[#FAF8F4] rounded-xl border border-[#DDD4C3] p-4">
-                <span className="block font-medium text-[#1B4332] mb-1">
-                  Cleaning products flexibility
-                </span>
-                <span>
-                  Choose whether we bring cleaning supplies and equipment, or use products you
-                  provide.
-                </span>
-              </div>
-            </div>
-          </div>
+          <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
+            About Us
+          </p>
+          <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] leading-[1.2] mb-4">
+            A cleaner home, a more comfortable life.
+          </h2>
+          <p className="text-base sm:text-[17px] text-[#525753] leading-relaxed">
+            At {businessName}, we believe every home deserves thoughtful care and attention. We
+            provide reliable residential cleaning services designed to make your space fresher,
+            cleaner and more welcoming.
+          </p>
         </motion.div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:gap-8">
+          {ABOUT_SHOWCASE_PHOTOS.map((photo, index) => (
+            <motion.figure
+              key={photo.src}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.15 }}
+              transition={{
+                duration: 0.35,
+                delay: index * 0.06,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              className="flex flex-col"
+            >
+              <div className="aspect-[4/3] w-full overflow-hidden rounded-2xl border border-[#DDD4C3] bg-[#E7E0D3] shadow-[0_12px_30px_-18px_rgba(27,67,50,0.16)]">
+                <ResilientImage
+                  src={photo.src}
+                  alt={`${businessName} — ${photo.alt}`}
+                  fallbackTitle={photo.caption}
+                  className="w-full h-full object-cover object-top"
+                />
+              </div>
+              <figcaption className="mt-3 text-sm font-medium text-[#3B3F3C] text-center sm:text-left">
+                {photo.caption}
+              </figcaption>
+            </motion.figure>
+          ))}
+        </div>
       </div>
     </section>
   );

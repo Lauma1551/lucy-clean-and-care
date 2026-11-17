@@ -2,17 +2,17 @@ import { MessageCircle } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { AboutSection } from './components/AboutSection.tsx';
 import { BookingSection } from './components/BookingSection.tsx';
-import { ContactFooter } from './components/ContactFooter.tsx';
+import { ContactSection, SiteFooter } from './components/ContactFooter.tsx';
 import { Header } from './components/Header.tsx';
 import { Hero } from './components/Hero.tsx';
 import { PrivacyPolicyPage, TermsOfUsePage } from './components/LegalPages.tsx';
-import { PricingSection } from './components/PricingSection.tsx';
+import { PricingSection, type HomeOccupancyOption } from './components/PricingSection.tsx';
 
 const OwnerPortalModal = lazy(() =>
   import('./components/OwnerPortalModal.tsx').then((m) => ({ default: m.OwnerPortalModal }))
 );
 import { ServicesSection } from './components/ServicesSection.tsx';
-import { TeamSection } from './components/TeamSection.tsx';
+import { FounderSection, FutureRecruitmentSection } from './components/TeamSection.tsx';
 import { WhatsAppFallbackModal } from './components/WhatsAppFallbackModal.tsx';
 import { WhyChooseSection } from './components/WhyChooseSection.tsx';
 import { isFirebaseConfigured, verifyFirestoreConnection } from './lib/firebase.ts';
@@ -42,6 +42,7 @@ export default function App() {
 
   const [selectedHouseType, setSelectedHouseType] = useState<string>(HOUSE_TYPES[0]);
   const [selectedCleaningType, setSelectedCleaningType] = useState<string>(CLEANING_TYPES[0]);
+  const [selectedOccupancy, setSelectedOccupancy] = useState<HomeOccupancyOption>('occupied');
 
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [ownerEntryOpen, setOwnerEntryOpen] = useState(false);
@@ -149,10 +150,13 @@ export default function App() {
   }, [navigateHomeSection]);
 
   const handleRequestQuote = useCallback(
-    (houseType: string, cleaningType?: string) => {
+    (houseType: string, cleaningType?: string, occupancy?: HomeOccupancyOption) => {
       setSelectedHouseType(houseType);
       if (cleaningType) {
         setSelectedCleaningType(cleaningType);
+      }
+      if (occupancy) {
+        setSelectedOccupancy(occupancy);
       }
       scrollToBooking();
     },
@@ -224,19 +228,25 @@ export default function App() {
 
       <main className="flex-1">
         {isPrivacyRoute ? (
-          <PrivacyPolicyPage
-            config={config}
-            onBackHome={() => navigate('/')}
-            onNavigate={navigate}
-            onWhatsAppClick={() => handleOpenWhatsApp()}
-          />
+          <>
+            <PrivacyPolicyPage
+              config={config}
+              onBackHome={() => navigate('/')}
+              onNavigate={navigate}
+              onWhatsAppClick={() => handleOpenWhatsApp()}
+            />
+            <ContactSection config={config} onWhatsAppClick={() => handleOpenWhatsApp()} />
+          </>
         ) : isTermsRoute ? (
-          <TermsOfUsePage
-            config={config}
-            onBackHome={() => navigate('/')}
-            onNavigate={navigate}
-            onWhatsAppClick={() => handleOpenWhatsApp()}
-          />
+          <>
+            <TermsOfUsePage
+              config={config}
+              onBackHome={() => navigate('/')}
+              onNavigate={navigate}
+              onWhatsAppClick={() => handleOpenWhatsApp()}
+            />
+            <ContactSection config={config} onWhatsAppClick={() => handleOpenWhatsApp()} />
+          </>
         ) : (
           <>
             <Hero
@@ -244,35 +254,45 @@ export default function App() {
               onBookClick={scrollToBooking}
               onWhatsAppClick={() => handleOpenWhatsApp()}
             />
+            {/* 1. About Lucy Clean & Care */}
             <AboutSection config={config} />
+            {/* 2. Our Cleaning Services */}
             <ServicesSection
               config={config}
               services={services}
               onRequestQuote={handleRequestQuote}
             />
+            {/* 3. Pricing */}
             <PricingSection
               config={config}
               pricing={pricing}
-              onRequestQuote={(houseType) => handleRequestQuote(houseType)}
+              onRequestQuote={(houseType, occupancy) =>
+                handleRequestQuote(houseType, undefined, occupancy)
+              }
             />
-            <WhyChooseSection config={config} />
-            <TeamSection
-              config={config}
-              onBookClick={scrollToBooking}
-              onWhatsAppInquiry={(msg) => handleOpenWhatsApp(msg)}
-            />
+            {/* 4. Book a Cleaning (immediately after Pricing) */}
             <BookingSection
               config={config}
               selectedHouseType={selectedHouseType}
               selectedCleaningType={selectedCleaningType}
+              selectedOccupancy={selectedOccupancy}
               pricing={pricing}
               onContinueOnWhatsApp={(msg) => handleOpenWhatsApp(msg)}
             />
+            <WhyChooseSection config={config} />
+            {/* 5. Contact Us */}
+            <ContactSection config={config} onWhatsAppClick={() => handleOpenWhatsApp()} />
+            {/* 6. Future Recruitment (second-last section) */}
+            <FutureRecruitmentSection
+              config={config}
+              onWhatsAppInquiry={(msg) => handleOpenWhatsApp(msg)}
+            />
+            {/* 7. Meet the Founder (very last section) */}
+            <FounderSection config={config} onBookClick={scrollToBooking} />
           </>
         )}
-        <ContactFooter
+        <SiteFooter
           config={config}
-          onWhatsAppClick={() => handleOpenWhatsApp()}
           onNavigate={navigate}
           onNavigateHomeSection={navigateHomeSection}
           onOwnerTrigger={() => setOwnerEntryOpen(true)}
