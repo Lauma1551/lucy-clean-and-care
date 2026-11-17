@@ -9,83 +9,158 @@ interface ServicesSectionProps {
   onRequestQuote: (houseType: string, cleaningType: string) => void;
 }
 
+interface FeaturedServiceCard {
+  id: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  imageAlt: string;
+  houseTypeValue: string;
+  cleaningTypeValue: string;
+  tasks: readonly string[];
+}
+
+const FEATURED_SERVICES: readonly FeaturedServiceCard[] = [
+  {
+    id: 'regular-home-cleaning',
+    title: 'Regular Home Cleaning',
+    description: 'Routine cleaning to keep occupied homes fresh, tidy and comfortable.',
+    imageUrl: '/src/assets/images/about_floor_mop_1794945013223.jpg',
+    imageAlt: 'Mopping a residential living room floor during a regular home clean',
+    houseTypeValue: 'One Bedroom',
+    cleaningTypeValue: 'Standard Home Cleaning',
+    tasks: [
+      'Dusting and wiping surfaces',
+      'Sweeping and mopping floors',
+      'Cleaning kitchen surfaces',
+      'Bathroom cleaning',
+    ],
+  },
+  {
+    id: 'deep-cleaning',
+    title: 'Deep Cleaning',
+    description: 'A more thorough cleaning service for areas that need additional attention.',
+    imageUrl: '/src/assets/images/about_kitchen_clean_1794945012510.jpg',
+    imageAlt: 'Detailed deep cleaning of a residential kitchen countertop and sink',
+    houseTypeValue: 'Two Bedrooms',
+    cleaningTypeValue: 'Deep Cleaning',
+    tasks: [
+      'Detailed kitchen cleaning',
+      'Thorough bathroom cleaning',
+      'Cleaning corners and hard-to-reach areas',
+      'Detailed surface and floor cleaning',
+    ],
+  },
+  {
+    id: 'kitchen-bathroom-cleaning',
+    title: 'Kitchen and Bathroom Cleaning',
+    description:
+      'Focused degreasing and sanitising for kitchen counters, sinks, tiles, and washrooms.',
+    imageUrl: '/src/assets/images/about_sink_clean_1794945012422.jpg',
+    imageAlt: 'Polishing and sanitising a residential bathroom sink and tap',
+    houseTypeValue: 'One Bedroom',
+    cleaningTypeValue: 'Kitchen and Bathroom Cleaning',
+    tasks: [
+      'Wiping counters, hobs, and splashbacks',
+      'Cleaning kitchen and bathroom sinks',
+      'Scrubbing bathroom tiles and showers',
+      'Sanitising taps and sanitary fixtures',
+    ],
+  },
+  {
+    id: 'move-in-out-cleaning',
+    title: 'Move-In / Move-Out Cleaning',
+    description: 'Cleaning a home when preparing to move in or leave a property.',
+    imageUrl: '/src/assets/images/service_move_in_out_1794804175840.jpg',
+    imageAlt: 'Clean empty apartment prepared for move-in or move-out handover',
+    houseTypeValue: 'Two Bedrooms',
+    cleaningTypeValue: 'Move-In and Move-Out Cleaning',
+    tasks: [
+      'Cleaning empty rooms',
+      'Kitchen and bathroom cleaning',
+      'Wiping cupboards and surfaces',
+      'Floor cleaning',
+    ],
+  },
+];
+
 export function ServicesSection({
   config,
   services,
   onRequestQuote,
 }: ServicesSectionProps) {
+  const activeServices = FEATURED_SERVICES.filter((card) => {
+    const matchingItems = services.filter(
+      (item) => item.cleaningTypeValue === card.cleaningTypeValue
+    );
+    if (matchingItems.length === 0) return true;
+    return matchingItems.some((item) => item.available !== false);
+  });
+
   return (
-    <section id="services" className="py-16 sm:py-22 lg:py-24 border-b border-[#DDD4C3]">
+    <section id="services" className="py-14 sm:py-20 border-b border-[#DDD4C3]">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-6 mb-12">
-          <div className="max-w-2xl">
-            <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
-              Our Cleaning Services
-            </p>
-            <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance]">
-              Tailored care for homes in {config.serviceAreas.toLowerCase()}.
-            </h2>
-          </div>
-          <p className="text-sm sm:text-base text-[#525753] max-w-md leading-relaxed">
-            Whether you live in a compact bedsitter or a spacious family house, the final price
-            depends on house size, current condition, cleaning product option, and your specific
-            requirements.
+        <div className="max-w-2xl mb-10 sm:mb-12">
+          <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-2.5">
+            Services
+          </p>
+          <h1 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] mb-3">
+            Home cleaning tailored to your space.
+          </h1>
+          <p className="text-sm sm:text-base text-[#525753] leading-relaxed">
+            Clear residential cleaning services across {config.serviceAreas.toLowerCase()}, from
+            bedsitter apartments to multi-bedroom homes.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {services
-            .filter((service) => service.available !== false)
-            .map((service, index) => {
-              const orderLabel = String(index + 1).padStart(2, '0');
-              return (
-                <motion.article
-                  key={service.id}
-                  initial={{ opacity: 0, y: 12 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.1 }}
-                  transition={{
-                    duration: 0.35,
-                    delay: Math.min(index * 0.04, 0.2),
-                    ease: [0.16, 1, 0.3, 1],
-                  }}
-                  className="group flex flex-col bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] overflow-hidden shadow-[0_10px_28px_-16px_rgba(27,67,50,0.14)] transition-all duration-200 hover:border-[#1B4332]/45 hover:shadow-[0_18px_36px_-14px_rgba(27,67,50,0.2)]"
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-7 lg:gap-8">
+          {activeServices.map((service, index) => (
+            <motion.article
+              key={service.id}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.1 }}
+              transition={{
+                duration: 0.35,
+                delay: Math.min(index * 0.05, 0.2),
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              className="group flex flex-col bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] overflow-hidden shadow-[0_12px_30px_-18px_rgba(27,67,50,0.14)]"
+            >
+              <div className="aspect-[16/10] w-full overflow-hidden bg-[#EFE9DC] border-b border-[#DDD4C3]">
+                <ResilientImage
+                  src={service.imageUrl}
+                  alt={service.imageAlt}
+                  fallbackTitle={service.title}
+                  className="w-full h-full object-cover object-top transition-transform duration-300 group-hover:scale-[1.02]"
+                />
+              </div>
+
+              <div className="p-6 flex-1 flex flex-col">
+                <h2 className="font-display text-2xl font-medium text-[#222523] leading-snug mb-2">
+                  {service.title}
+                </h2>
+                <p className="text-sm sm:text-[15px] text-[#525753] leading-relaxed mb-4">
+                  {service.description}
+                </p>
+
+                <ul className="space-y-1.5 text-sm text-[#3B3F3C] mb-6 flex-1 list-disc pl-5 marker:text-[#1B4332]">
+                  {service.tasks.map((task) => (
+                    <li key={task}>{task}</li>
+                  ))}
+                </ul>
+
+                <button
+                  type="button"
+                  onClick={() => onRequestQuote(service.houseTypeValue, service.cleaningTypeValue)}
+                  className="inline-flex items-center justify-between w-full px-5 py-3 min-h-[44px] text-sm font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-xl transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332]"
                 >
-                  <div className="aspect-[4/3] w-full overflow-hidden bg-[#EFE9DC] border-b border-[#DDD4C3]">
-                    <ResilientImage
-                      src={service.imageUrl}
-                      alt={`${service.title} residential cleaning service`}
-                      fallbackTitle={service.title}
-                      className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                    />
-                  </div>
-
-                  <div className="p-5 flex-1 flex flex-col">
-                    <p className="text-xs font-medium text-[#4F6F58] tabular-nums mb-1.5">
-                      {orderLabel} <span aria-hidden="true">/</span> Residential Care
-                    </p>
-                    <h3 className="font-display text-lg font-medium text-[#222523] leading-snug mb-2.5">
-                      {service.title}
-                    </h3>
-                    <p className="text-sm text-[#525753] leading-relaxed mb-4 flex-1">
-                      {service.description}
-                    </p>
-                    {service.pricingNote && (
-                      <p className="text-xs text-[#4F6F58] mb-4">{service.pricingNote}</p>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={() => onRequestQuote(service.houseTypeValue, service.cleaningTypeValue)}
-                      className="inline-flex items-center justify-between w-full px-4 py-2.5 min-h-[44px] text-sm font-medium text-[#1B4332] bg-[#F4EFE6] hover:bg-[#1B4332] hover:text-white rounded-xl border border-[#DDD4C3] hover:border-[#1B4332] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332]"
-                    >
-                      <span>Request a Quote</span>
-                      <ArrowUpRight className="w-4 h-4 shrink-0" aria-hidden="true" />
-                    </button>
-                  </div>
-                </motion.article>
-              );
-            })}
+                  <span>Book This Service</span>
+                  <ArrowUpRight className="w-4 h-4 shrink-0" aria-hidden="true" />
+                </button>
+              </div>
+            </motion.article>
+          ))}
         </div>
 
         {/* Cleaning Products Policy */}

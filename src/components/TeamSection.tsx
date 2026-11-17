@@ -15,7 +15,7 @@ export function FounderSection({ config }: FounderSectionProps) {
   return (
     <section
       id="team"
-      className="py-10 sm:py-14 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
+      className="py-16 sm:py-24 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
     >
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -23,13 +23,13 @@ export function FounderSection({ config }: FounderSectionProps) {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, amount: 0.2 }}
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-          className="bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] p-5 sm:p-7 shadow-[0_10px_28px_-18px_rgba(27,67,50,0.12)]"
+          className="bg-[#FAF8F4] rounded-2xl border border-[#DDD4C3] p-6 sm:p-8 shadow-[0_10px_28px_-18px_rgba(27,67,50,0.12)]"
         >
-          <h2 className="text-xs font-medium tracking-wide text-[#4F6F58] mb-3.5">
-            Meet the Founder
-          </h2>
+          <h1 className="text-xs font-medium tracking-wide text-[#4F6F58] mb-4">
+            Founder
+          </h1>
 
-          <div className="flex items-start sm:items-center gap-4 sm:gap-6">
+          <div className="flex items-start sm:items-center gap-5 sm:gap-6">
             <div className="w-20 h-20 sm:w-24 sm:h-24 shrink-0 overflow-hidden rounded-xl border border-[#DDD4C3] bg-[#E7E0D3]">
               <ResilientImage
                 src={FOUNDER_IMAGE_URL}
@@ -44,11 +44,10 @@ export function FounderSection({ config }: FounderSectionProps) {
                 {founderName}
               </p>
               <p className="text-xs sm:text-sm font-medium text-[#4F6F58] mt-0.5 mb-2">
-                Founder <span aria-hidden="true">|</span> {config.businessName}
+                Founder, {config.businessName}
               </p>
               <p className="text-sm text-[#3B3F3C] leading-relaxed">
-                I founded {config.businessName} with a simple vision: to make homes cleaner, fresher
-                and more comfortable through reliable and thoughtful cleaning services.
+                Building a cleaning service around care, trust and attention to detail.
               </p>
             </div>
           </div>

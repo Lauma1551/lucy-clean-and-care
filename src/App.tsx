@@ -5,6 +5,7 @@ import { BookingSection } from './components/BookingSection.tsx';
 import { ContactSection, SiteFooter } from './components/ContactFooter.tsx';
 import { Header } from './components/Header.tsx';
 import { Hero } from './components/Hero.tsx';
+import { HomePageOverview } from './components/HomePageOverview.tsx';
 import { PrivacyPolicyPage, TermsOfUsePage } from './components/LegalPages.tsx';
 import { PricingSection, type HomeOccupancyOption } from './components/PricingSection.tsx';
 
@@ -14,7 +15,6 @@ const OwnerPortalModal = lazy(() =>
 import { ServicesSection } from './components/ServicesSection.tsx';
 import { FounderSection, FutureRecruitmentSection } from './components/TeamSection.tsx';
 import { WhatsAppFallbackModal } from './components/WhatsAppFallbackModal.tsx';
-import { WhyChooseSection } from './components/WhyChooseSection.tsx';
 import { isFirebaseConfigured, verifyFirestoreConnection } from './lib/firebase.ts';
 import { fetchPublicSiteData } from './lib/firestoreService.ts';
 import {
@@ -28,8 +28,36 @@ import type { PricingCategory, ServiceItem, SiteConfig } from './shared/types.ts
 import { buildWhatsAppUrl } from './utils/whatsapp.ts';
 
 function normalizePath(rawPath: string): string {
-  const cleaned = rawPath.replace(/\/+$/, '');
+  const pathOnly = rawPath.split('#')[0]?.split('?')[0] ?? '/';
+  const cleaned = pathOnly.replace(/\/+$/, '');
+  if (cleaned === '/recruitment') return '/contact';
   return cleaned === '' ? '/' : cleaned;
+}
+
+function getPageTitle(pathname: string, businessName: string, tagline: string): string {
+  switch (pathname) {
+    case '/about':
+      return `About Us | ${businessName}`;
+    case '/services':
+      return `Services | ${businessName}`;
+    case '/pricing':
+      return `Pricing | ${businessName}`;
+    case '/contact':
+      return `Contact | ${businessName}`;
+    case '/founder':
+      return `Founder | ${businessName}`;
+    case '/book':
+      return `Book a Cleaning | ${businessName}`;
+    case '/privacy-policy':
+      return `Privacy Policy | ${businessName}`;
+    case '/terms-of-use':
+      return `Terms of Use | ${businessName}`;
+    case '/owner':
+    case '/owner-portal':
+      return `Owner Access | ${businessName}`;
+    default:
+      return `${businessName} | ${tagline}`;
+  }
 }
 
 export default function App() {
@@ -47,17 +75,38 @@ export default function App() {
   const [whatsAppModalOpen, setWhatsAppModalOpen] = useState(false);
   const [ownerEntryOpen, setOwnerEntryOpen] = useState(false);
 
-  const isPrivacyRoute = pathname === '/privacy-policy';
-  const isTermsRoute = pathname === '/terms-of-use';
   const isOwnerRoute = pathname === '/owner' || pathname === '/owner-portal';
+
+  const scrollToHashTarget = useCallback((hashId: string) => {
+    window.requestAnimationFrame(() => {
+      window.setTimeout(() => {
+        document.getElementById(hashId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 60);
+    });
+  }, []);
 
   useEffect(() => {
     const handlePopState = () => {
-      setPathname(normalizePath(window.location.pathname));
+      const nextPath = normalizePath(window.location.pathname);
+      setPathname(nextPath);
+      const hash = window.location.hash.replace(/^#/, '');
+      if (hash) {
+        scrollToHashTarget(hash);
+      } else {
+        window.scrollTo({ top: 0, behavior: 'auto' });
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, []);
+  }, [scrollToHashTarget]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash.replace(/^#/, '');
+    if (hash) {
+      scrollToHashTarget(hash);
+    }
+  }, [pathname, scrollToHashTarget]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -77,16 +126,8 @@ export default function App() {
   }, [ownerEntryOpen]);
 
   useEffect(() => {
-    if (isPrivacyRoute) {
-      document.title = `Privacy Policy | ${config.businessName}`;
-    } else if (isTermsRoute) {
-      document.title = `Terms of Use | ${config.businessName}`;
-    } else if (isOwnerRoute) {
-      document.title = `Owner Access | ${config.businessName}`;
-    } else {
-      document.title = `${config.businessName} | ${config.tagline}`;
-    }
-  }, [isPrivacyRoute, isTermsRoute, isOwnerRoute, config.businessName, config.tagline]);
+    document.title = getPageTitle(pathname, config.businessName, config.tagline);
+  }, [pathname, config.businessName, config.tagline]);
 
   useEffect(() => {
     if (!isFirebaseConfigured) return;
@@ -109,45 +150,31 @@ export default function App() {
     };
   }, []);
 
-  const navigate = useCallback((toPath: string) => {
-    const normalized = normalizePath(toPath);
-    if (normalizePath(window.location.pathname) !== normalized) {
-      window.history.pushState({}, '', normalized);
-    }
-    setPathname(normalized);
-    window.scrollTo({ top: 0, behavior: 'auto' });
-  }, []);
+  const navigate = useCallback(
+    (toPath: string) => {
+      const [, rawHash = ''] = toPath.split('#');
+      const normalized = normalizePath(toPath);
+      const targetUrl = rawHash ? `${normalized}#${rawHash}` : normalized;
+      const currentFull = `${normalizePath(window.location.pathname)}${window.location.hash}`;
 
-  const navigateHomeSection = useCallback(
-    (sectionId?: string) => {
-      const targetUrl = sectionId ? `/#${sectionId}` : '/';
-      if (pathname !== '/') {
+      if (currentFull !== targetUrl) {
         window.history.pushState({}, '', targetUrl);
-        setPathname('/');
-        window.requestAnimationFrame(() => {
-          window.setTimeout(() => {
-            if (sectionId) {
-              document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            } else {
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }
-          }, 60);
-        });
-        return;
       }
 
-      if (sectionId) {
-        document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setPathname(normalized);
+
+      if (rawHash) {
+        scrollToHashTarget(rawHash);
       } else {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo({ top: 0, behavior: 'auto' });
       }
     },
-    [pathname]
+    [scrollToHashTarget]
   );
 
-  const scrollToBooking = useCallback(() => {
-    navigateHomeSection('booking');
-  }, [navigateHomeSection]);
+  const goToBooking = useCallback(() => {
+    navigate('/book');
+  }, [navigate]);
 
   const handleRequestQuote = useCallback(
     (houseType: string, cleaningType?: string, occupancy?: HomeOccupancyOption) => {
@@ -158,9 +185,9 @@ export default function App() {
       if (occupancy) {
         setSelectedOccupancy(occupancy);
       }
-      scrollToBooking();
+      navigate('/book');
     },
-    [scrollToBooking]
+    [navigate]
   );
 
   const handleOpenWhatsApp = useCallback(
@@ -217,17 +244,65 @@ export default function App() {
     );
   }
 
-  return (
-    <div id="top" className="min-h-screen bg-[#FAF8F4] text-[#222523] flex flex-col">
-      <Header
-        logoText={config.logoText}
-        businessName={config.businessName}
-        onBookClick={scrollToBooking}
-        onNavigateHomeSection={navigateHomeSection}
-      />
+  const renderPage = () => {
+    switch (pathname) {
+      case '/about':
+        return <AboutSection config={config} />;
 
-      <main className="flex-1">
-        {isPrivacyRoute ? (
+      case '/services':
+        return (
+          <ServicesSection
+            config={config}
+            services={services}
+            onRequestQuote={(houseType, cleaningType) =>
+              handleRequestQuote(houseType, cleaningType)
+            }
+          />
+        );
+
+      case '/pricing':
+        return (
+          <PricingSection
+            config={config}
+            pricing={pricing}
+            onRequestQuote={(houseType, occupancy) =>
+              handleRequestQuote(houseType, undefined, occupancy)
+            }
+          />
+        );
+
+      case '/contact':
+        return (
+          <>
+            <ContactSection
+              config={config}
+              onWhatsAppClick={() => handleOpenWhatsApp()}
+              onBookClick={goToBooking}
+            />
+            <FutureRecruitmentSection
+              config={config}
+              onWhatsAppInquiry={(msg) => handleOpenWhatsApp(msg)}
+            />
+          </>
+        );
+
+      case '/founder':
+        return <FounderSection config={config} onBookClick={goToBooking} />;
+
+      case '/book':
+        return (
+          <BookingSection
+            config={config}
+            selectedHouseType={selectedHouseType}
+            selectedCleaningType={selectedCleaningType}
+            selectedOccupancy={selectedOccupancy}
+            pricing={pricing}
+            onContinueOnWhatsApp={(msg) => handleOpenWhatsApp(msg)}
+          />
+        );
+
+      case '/privacy-policy':
+        return (
           <>
             <PrivacyPolicyPage
               config={config}
@@ -235,9 +310,16 @@ export default function App() {
               onNavigate={navigate}
               onWhatsAppClick={() => handleOpenWhatsApp()}
             />
-            <ContactSection config={config} onWhatsAppClick={() => handleOpenWhatsApp()} />
+            <ContactSection
+              config={config}
+              onWhatsAppClick={() => handleOpenWhatsApp()}
+              onBookClick={goToBooking}
+            />
           </>
-        ) : isTermsRoute ? (
+        );
+
+      case '/terms-of-use':
+        return (
           <>
             <TermsOfUsePage
               config={config}
@@ -245,56 +327,48 @@ export default function App() {
               onNavigate={navigate}
               onWhatsAppClick={() => handleOpenWhatsApp()}
             />
-            <ContactSection config={config} onWhatsAppClick={() => handleOpenWhatsApp()} />
+            <ContactSection
+              config={config}
+              onWhatsAppClick={() => handleOpenWhatsApp()}
+              onBookClick={goToBooking}
+            />
           </>
-        ) : (
+        );
+
+      default:
+        return (
           <>
             <Hero
               config={config}
-              onBookClick={scrollToBooking}
+              onBookClick={goToBooking}
               onWhatsAppClick={() => handleOpenWhatsApp()}
             />
-            {/* 1. About Lucy Clean & Care */}
-            <AboutSection config={config} />
-            {/* 2. Our Cleaning Services */}
-            <ServicesSection
+            <HomePageOverview
               config={config}
-              services={services}
-              onRequestQuote={handleRequestQuote}
-            />
-            {/* 3. Pricing */}
-            <PricingSection
-              config={config}
-              pricing={pricing}
-              onRequestQuote={(houseType, occupancy) =>
-                handleRequestQuote(houseType, undefined, occupancy)
+              onNavigate={navigate}
+              onBookService={(houseType, cleaningType) =>
+                handleRequestQuote(houseType, cleaningType)
               }
             />
-            {/* 4. Book a Cleaning (immediately after Pricing) */}
-            <BookingSection
-              config={config}
-              selectedHouseType={selectedHouseType}
-              selectedCleaningType={selectedCleaningType}
-              selectedOccupancy={selectedOccupancy}
-              pricing={pricing}
-              onContinueOnWhatsApp={(msg) => handleOpenWhatsApp(msg)}
-            />
-            <WhyChooseSection config={config} />
-            {/* 5. Contact Us */}
-            <ContactSection config={config} onWhatsAppClick={() => handleOpenWhatsApp()} />
-            {/* 6. Future Recruitment (second-last section) */}
-            <FutureRecruitmentSection
-              config={config}
-              onWhatsAppInquiry={(msg) => handleOpenWhatsApp(msg)}
-            />
-            {/* 7. Meet the Founder (very last section) */}
-            <FounderSection config={config} onBookClick={scrollToBooking} />
           </>
-        )}
+        );
+    }
+  };
+
+  return (
+    <div id="top" className="min-h-screen bg-[#FAF8F4] text-[#222523] flex flex-col">
+      <Header
+        logoText={config.logoText}
+        businessName={config.businessName}
+        currentPath={pathname}
+        onNavigate={navigate}
+      />
+
+      <main className="flex-1 flex flex-col">
+        <div className="flex-1">{renderPage()}</div>
         <SiteFooter
           config={config}
           onNavigate={navigate}
-          onNavigateHomeSection={navigateHomeSection}
           onOwnerTrigger={() => setOwnerEntryOpen(true)}
         />
       </main>
@@ -314,7 +388,7 @@ export default function App() {
         businessName={config.businessName}
         isOpen={whatsAppModalOpen}
         onClose={() => setWhatsAppModalOpen(false)}
-        onGoToBooking={scrollToBooking}
+        onGoToBooking={goToBooking}
       />
 
       {ownerEntryOpen && (

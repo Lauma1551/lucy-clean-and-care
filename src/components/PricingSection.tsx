@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import type { PricingCategory, SiteConfig } from '../shared/types.ts';
+import { ResilientImage } from './ResilientImage.tsx';
 
 export type HomeOccupancyOption = 'occupied' | 'new_unoccupied';
 
@@ -68,74 +69,94 @@ export function PricingSection({ config, pricing, onRequestQuote }: PricingSecti
   return (
     <section
       id="pricing"
-      className="py-16 sm:py-22 lg:py-24 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
+      className="py-14 sm:py-20 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-3xl mb-8">
-          <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
+          <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-2.5">
             Pricing (KES) · Kenyan Shillings
           </p>
-          <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] mb-3">
+          <h1 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] mb-3">
             Clear pricing based on your home&apos;s occupancy.
-          </h2>
+          </h1>
           <p className="text-sm sm:text-base text-[#525753] leading-relaxed">
             Choose the category that matches whether you are already living in the home or preparing
             a new, unoccupied house before moving in.
           </p>
         </div>
 
-        {/* Two Distinguished Pricing Category Descriptions */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-7">
+        {/* Two Distinguished Photographic Pricing Category Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8">
           <button
             type="button"
             onClick={() => setSelectedCategory('occupied')}
             aria-pressed={selectedCategory === 'occupied'}
-            className={`text-left rounded-2xl border p-5 sm:p-6 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] ${
+            className={`text-left rounded-2xl border overflow-hidden transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] ${
               selectedCategory === 'occupied'
                 ? 'bg-[#FAF8F4] border-[#1B4332] shadow-[0_10px_26px_-16px_rgba(27,67,50,0.22)]'
                 : 'bg-[#FAF8F4]/70 border-[#DDD4C3] hover:border-[#4F6F58]'
             }`}
           >
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h3 className="font-display text-lg sm:text-xl font-medium text-[#222523]">
-                1. Standard Cleaning – Occupied Homes
-              </h3>
-              {selectedCategory === 'occupied' && (
-                <span className="text-xs font-semibold text-[#1B4332] whitespace-nowrap shrink-0">
-                  Selected
-                </span>
-              )}
+            <div className="aspect-[16/8] w-full overflow-hidden bg-[#EFE9DC] border-b border-[#DDD4C3]">
+              <ResilientImage
+                src="/src/assets/images/service_one_bedroom_1794804173510.jpg"
+                alt="Clean furnished occupied living room and bedroom apartment"
+                fallbackTitle="Standard Cleaning – Occupied Homes"
+                className="w-full h-full object-cover"
+              />
             </div>
-            <p className="text-sm text-[#525753] leading-relaxed">
-              Applies when a customer is already living in the house and books {config.businessName}{' '}
-              to clean their occupied home.
-            </p>
+            <div className="p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h2 className="font-display text-lg sm:text-xl font-medium text-[#222523]">
+                  1. Standard Cleaning – Occupied Homes
+                </h2>
+                {selectedCategory === 'occupied' && (
+                  <span className="text-xs font-semibold text-[#1B4332] whitespace-nowrap shrink-0">
+                    Selected
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-[#525753] leading-relaxed">
+                Applies when a customer is already living in the house and books{' '}
+                {config.businessName} to clean their occupied home.
+              </p>
+            </div>
           </button>
 
           <button
             type="button"
             onClick={() => setSelectedCategory('new_unoccupied')}
             aria-pressed={selectedCategory === 'new_unoccupied'}
-            className={`text-left rounded-2xl border p-5 sm:p-6 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] ${
+            className={`text-left rounded-2xl border overflow-hidden transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] ${
               selectedCategory === 'new_unoccupied'
                 ? 'bg-[#FAF8F4] border-[#1B4332] shadow-[0_10px_26px_-16px_rgba(27,67,50,0.22)]'
                 : 'bg-[#FAF8F4]/70 border-[#DDD4C3] hover:border-[#4F6F58]'
             }`}
           >
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <h3 className="font-display text-lg sm:text-xl font-medium text-[#222523]">
-                2. New House Cleaning – Before Occupation
-              </h3>
-              {selectedCategory === 'new_unoccupied' && (
-                <span className="text-xs font-semibold text-[#1B4332] whitespace-nowrap shrink-0">
-                  Selected
-                </span>
-              )}
+            <div className="aspect-[16/8] w-full overflow-hidden bg-[#EFE9DC] border-b border-[#DDD4C3]">
+              <ResilientImage
+                src="/src/assets/images/service_move_in_out_1794804175840.jpg"
+                alt="Bright newly cleaned empty house before occupation"
+                fallbackTitle="New House Cleaning – Before Occupation"
+                className="w-full h-full object-cover"
+              />
             </div>
-            <p className="text-sm text-[#525753] leading-relaxed">
-              Applies when a customer has a new, unoccupied house and wants it cleaned before moving
-              in. This is distinct from our full Move-In and Move-Out Cleaning service.
-            </p>
+            <div className="p-5 sm:p-6">
+              <div className="flex items-center justify-between gap-3 mb-2">
+                <h2 className="font-display text-lg sm:text-xl font-medium text-[#222523]">
+                  2. New House Cleaning – Before Occupation
+                </h2>
+                {selectedCategory === 'new_unoccupied' && (
+                  <span className="text-xs font-semibold text-[#1B4332] whitespace-nowrap shrink-0">
+                    Selected
+                  </span>
+                )}
+              </div>
+              <p className="text-sm text-[#525753] leading-relaxed">
+                Applies when a customer has a new, unoccupied house and wants it cleaned before
+                moving in. This is distinct from our separate Move-In / Move-Out Cleaning service.
+              </p>
+            </div>
           </button>
         </div>
 

@@ -15,12 +15,12 @@ const ABOUT_SHOWCASE_PHOTOS = [
   {
     src: '/src/assets/images/about_sink_clean_1794945012422.jpg',
     alt: 'Cleaning a porcelain bathroom sink and chrome tap',
-    caption: 'Bathroom sink care',
+    caption: 'Bathroom sink cleaning',
   },
   {
     src: '/src/assets/images/about_floor_mop_1794945013223.jpg',
     alt: 'Mopping a home floor using a mop and bucket',
-    caption: 'Floor mopping',
+    caption: 'Floor mopping with a bucket',
   },
 ] as const;
 
@@ -30,7 +30,7 @@ export function AboutSection({ config }: AboutSectionProps) {
   return (
     <section
       id="about"
-      className="py-16 sm:py-22 lg:py-24 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
+      className="py-14 sm:py-20 bg-[#F4EFE6]/75 border-b border-[#DDD4C3]"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
@@ -40,16 +40,11 @@ export function AboutSection({ config }: AboutSectionProps) {
           transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           className="max-w-2xl mx-auto text-center mb-12 sm:mb-14"
         >
-          <p className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
+          <h1 className="text-xs font-medium tracking-wide text-[#1B4332] mb-3">
             About Us
-          </p>
-          <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] leading-[1.2] mb-4">
-            A cleaner home, a more comfortable life.
-          </h2>
-          <p className="text-base sm:text-[17px] text-[#525753] leading-relaxed">
-            At {businessName}, we believe every home deserves thoughtful care and attention. We
-            provide reliable residential cleaning services designed to make your space fresher,
-            cleaner and more welcoming.
+          </h1>
+          <p className="font-display text-3xl sm:text-4xl font-medium tracking-tight text-[#222523] [text-wrap:balance] leading-[1.2]">
+            Thoughtful home cleaning for a fresher, happier home.
           </p>
         </motion.div>
 
