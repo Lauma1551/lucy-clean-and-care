@@ -1,4 +1,4 @@
-import { ArrowRight, MessageCircle } from 'lucide-react';
+import { ChevronRight, MessageCircle } from 'lucide-react';
 import { motion } from 'motion/react';
 import { HERO_IMAGE_URL } from '../shared/defaults.ts';
 import type { SiteConfig } from '../shared/types.ts';
@@ -14,53 +14,99 @@ export function Hero({ config, onBookClick, onWhatsAppClick }: HeroProps) {
   return (
     <section
       id="top"
-      className="pt-10 pb-16 sm:pt-14 sm:pb-20 lg:pt-16 lg:pb-24 border-b border-[#DDD4C3] bg-gradient-to-b from-[#FAF8F4] via-[#FAF8F4] to-[#F5F0E6]/60"
+      className="bg-[#F6F5F1] border-b border-[#DDD4C3] overflow-hidden"
     >
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-12 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-stretch">
           {/* Left Copy & Booking CTAs */}
           <motion.div
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="lg:col-span-5 flex flex-col justify-center"
+            transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+            className="lg:col-span-6 py-12 sm:py-16 lg:py-24 flex flex-col justify-center"
           >
-            <p className="text-xs sm:text-sm font-medium text-[#1B4332] tracking-wide mb-4">
-              {config.city} <span aria-hidden="true" className="mx-1.5 text-[#8FA896]">·</span>{' '}
-              {config.tagline}
-            </p>
+            {/* Broom Icon + Eyebrow + Headline Lockup */}
+            <div className="flex items-start gap-3.5 sm:gap-4">
+              <svg
+                viewBox="0 0 48 48"
+                fill="none"
+                aria-hidden="true"
+                className="w-10 h-10 sm:w-11 sm:h-11 text-[#1B4332] shrink-0 mt-0.5"
+              >
+                <path
+                  d="M35.5 7.5L22.5 23.5"
+                  stroke="currentColor"
+                  strokeWidth="2.6"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M18.2 21.6L26.8 28.4L24.5 31.3L15.9 24.5L18.2 21.6Z"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M16.2 24.8L8.5 34.8C12.2 37.6 17.6 39.2 22.8 39.5L24.6 31.2"
+                  stroke="currentColor"
+                  strokeWidth="2.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M13.5 31.2L11.5 35.8M18.2 33.4L16.8 38.2"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+                <circle cx="28.5" cy="36.5" r="1.4" fill="currentColor" />
+                <circle cx="32.5" cy="34" r="1.1" fill="currentColor" />
+                <circle cx="26.5" cy="40" r="1" fill="currentColor" />
+              </svg>
 
-            <h1 className="font-display text-[clamp(2.25rem,3.9vw,3.5rem)] font-medium leading-[1.09] tracking-tight text-[#222523] [text-wrap:balance] mb-6">
-              Your Home Deserves a Fresh Start.
-            </h1>
+              <div className="min-w-0">
+                <p className="text-xs font-medium tracking-[0.18em] text-[#4F6F58] mb-1.5">
+                  {config.city} <span aria-hidden="true" className="mx-1 text-[#8FA896]">·</span>{' '}
+                  {config.tagline}
+                </p>
+                <h1 className="font-display text-[clamp(2rem,3.6vw,3.1rem)] font-semibold leading-[1.12] tracking-tight text-[#222523] [text-wrap:balance]">
+                  Your Home Deserves a Fresh Start.
+                </h1>
+              </div>
+            </div>
 
-            <p className="text-base sm:text-[17px] text-[#4E544F] leading-relaxed max-w-xl mb-8">
+            {/* Warm Gold Accent Bar (Matching Reference Hero) */}
+            <div
+              aria-hidden="true"
+              className="w-14 h-[3px] bg-[#EAB308] rounded-full mt-5 mb-6"
+            />
+
+            <p className="text-base sm:text-[17px] text-[#525753] leading-[1.75] max-w-xl mb-8">
               Enjoy a cleaner, fresher and more comfortable home with {config.businessName}. We
               provide reliable residential cleaning services in {config.serviceAreas.toLowerCase()},
               designed around your home, your schedule and your needs.
             </p>
 
-            <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-stretch sm:items-center lg:items-stretch xl:items-center gap-3.5">
+            <div className="flex flex-wrap items-center gap-3.5">
               <button
                 type="button"
                 onClick={onBookClick}
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 min-h-[48px] text-sm sm:text-base font-medium text-white bg-[#1B4332] hover:bg-[#143325] rounded-xl shadow-[0_10px_24px_-8px_rgba(27,67,50,0.45)] transition-all duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAF8F4]"
+                className="inline-flex items-center justify-center gap-2 px-7 py-3.5 min-h-[48px] text-sm font-semibold tracking-wide text-white bg-[#1B4332] hover:bg-[#143325] rounded-lg shadow-[0_10px_22px_-10px_rgba(27,67,50,0.48)] transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F1]"
               >
                 <span>Book a Cleaning</span>
-                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+                <ChevronRight className="w-4 h-4" aria-hidden="true" />
               </button>
 
               <button
                 type="button"
                 onClick={onWhatsAppClick}
-                className="inline-flex items-center justify-center gap-2.5 px-6 py-3.5 min-h-[48px] text-sm sm:text-base font-medium text-[#1B4332] bg-[#F4EFE6] hover:bg-[#E9E2D4] border border-[#C9C1B0] rounded-xl transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] focus-visible:ring-offset-2 focus-visible:ring-offset-[#FAF8F4]"
+                className="inline-flex items-center justify-center gap-2 px-6 py-3.5 min-h-[48px] text-sm font-medium text-[#1B4332] bg-white hover:bg-[#EFECE4] border border-[#DDD4C3] rounded-lg transition-colors duration-150 whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1B4332] focus-visible:ring-offset-2 focus-visible:ring-offset-[#F6F5F1]"
               >
                 <MessageCircle className="w-4 h-4 text-[#1B4332]" aria-hidden="true" />
                 <span>Book on WhatsApp</span>
               </button>
             </div>
 
-            <div className="mt-9 pt-6 border-t border-[#DDD4C3] flex flex-wrap items-center gap-x-5 gap-y-2 text-xs sm:text-sm text-[#525753]">
+            <div className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs sm:text-sm text-[#525753]">
               <span>Bedsitters to family houses</span>
               <span aria-hidden="true" className="text-[#8FA896]">·</span>
               <span>Flexible product options</span>
@@ -69,23 +115,21 @@ export function Hero({ config, onBookClick, onWhatsAppClick }: HeroProps) {
             </div>
           </motion.div>
 
-          {/* Right Split-Screen Feature Photograph */}
+          {/* Right Bottom-Anchored Founder Cleaning Photograph */}
           <motion.div
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
-            className="lg:col-span-7"
+            transition={{ duration: 0.4, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+            className="lg:col-span-6 flex items-end justify-center lg:justify-end pt-0 lg:pt-10"
           >
-            <div className="rounded-3xl bg-[#EFE9DC] p-2.5 sm:p-3.5 border border-[#DDD4C3] shadow-[0_24px_60px_-18px_rgba(27,67,50,0.2)]">
-              <div className="aspect-[3/2] w-full rounded-2xl overflow-hidden bg-[#E7E0D3] border border-[#1B4332]/15">
-                <ResilientImage
-                  src={HERO_IMAGE_URL}
-                  alt="Founder Lucy Auma Aluoch of Lucy Clean & Care in white polo shirt with green piping, forest-green apron, and yellow gloves cleaning a bright modern living room"
-                  fallbackTitle={config.businessName}
-                  loading="eager"
-                  className="w-full h-full object-cover object-top"
-                />
-              </div>
+            <div className="w-full max-w-xl lg:max-w-none aspect-[3/2] lg:aspect-auto lg:h-[92%] lg:min-h-[420px] rounded-t-2xl overflow-hidden bg-[#E7E0D3] border-x border-t border-[#DDD4C3] shadow-[0_-10px_34px_-18px_rgba(27,67,50,0.2)]">
+              <ResilientImage
+                src={HERO_IMAGE_URL}
+                alt="Founder Lucy Auma Aluoch of Lucy Clean & Care in white polo shirt with green piping, forest-green apron, and yellow gloves cleaning a bright modern living room"
+                fallbackTitle={config.businessName}
+                loading="eager"
+                className="w-full h-full object-cover object-top"
+              />
             </div>
           </motion.div>
         </div>
